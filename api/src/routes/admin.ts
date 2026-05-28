@@ -102,6 +102,85 @@ export default async function adminRoutes(server: FastifyInstance) {
     }
   )
 
+  // Manual conversion create (single)
+  server.post<{ Body: { publisherId: string; offerId: string; eventType: string; revenue?: number; eventAt: string; sourceRefId?: string; status?: string } }>(
+    '/conversions',
+    async (request, reply) => {
+      const { publisherId, offerId, eventType, revenue = 0, eventAt, sourceRefId, status = 'PENDING' } = request.body
+      if (!publisherId || !offerId || !eventType || !eventAt) {
+        return reply.code(400).send({ error: 'Missing required fields: publisherId, offerId, eventType, eventAt' })
+      }
+      const offer = await prisma.offer.findUnique({ where: { id: offerId } })
+      if (!offer) return reply.code(404).send({ error: 'Offer not found' })
+
+      const commissionAmount = offer.commissionType === 'FLAT_CPA'
+        ? offer.commissionValue
+        : parseFloat((revenue * offer.commissionValue / 100).toFixed(2))
+
+      const conversion = await prisma.conversion.create({
+        data: {
+          sourceType: offer.mmpSource,
+          sourceRefId: sourceRefId || `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          offerId,
+          publisherId,
+          eventType,
+          revenue,
+          commissionAmount,
+          currency: offer.currency,
+          status: status as any,
+          rawPayload: { manual: true },
+          eventAt: new Date(eventAt),
+        },
+        include: { offer: { select: { name: true, mmpSource: true } }, publisher: { select: { name: true, email: true } } },
+      })
+      return reply.code(201).send(conversion)
+    }
+  )
+
+  // Manual conversion bulk upload (CSV rows as JSON)
+  server.post<{ Body: { rows: Array<{ publisherId: string; offerId: string; eventType: string; revenue?: number; eventAt: string; sourceRefId?: string }> } }>(
+    '/conversions/bulk',
+    async (request, reply) => {
+      const { rows } = request.body
+      if (!Array.isArray(rows) || rows.length === 0) {
+        return reply.code(400).send({ error: 'No rows provided' })
+      }
+      const results: { success: number; failed: number; errors: string[] } = { success: 0, failed: 0, errors: [] }
+
+      for (const row of rows) {
+        try {
+          const offer = await prisma.offer.findUnique({ where: { id: row.offerId } })
+          if (!offer) throw new Error(`Offer "${row.offerId}" not found`)
+          const revenue = row.revenue || 0
+          const commissionAmount = offer.commissionType === 'FLAT_CPA'
+            ? offer.commissionValue
+            : parseFloat((revenue * offer.commissionValue / 100).toFixed(2))
+
+          await prisma.conversion.create({
+            data: {
+              sourceType: offer.mmpSource,
+              sourceRefId: row.sourceRefId || `manual-bulk-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+              offerId: row.offerId,
+              publisherId: row.publisherId,
+              eventType: row.eventType,
+              revenue,
+              commissionAmount,
+              currency: offer.currency,
+              status: 'PENDING',
+              rawPayload: { manual: true, bulk: true },
+              eventAt: new Date(row.eventAt),
+            },
+          })
+          results.success++
+        } catch (err: any) {
+          results.failed++
+          results.errors.push(`Row ${results.success + results.failed}: ${err.message}`)
+        }
+      }
+      return results
+    }
+  )
+
   // Publishers
   server.get('/publishers', async () => {
     return prisma.user.findMany({
