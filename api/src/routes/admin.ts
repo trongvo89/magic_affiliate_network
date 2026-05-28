@@ -137,6 +137,57 @@ export default async function adminRoutes(server: FastifyInstance) {
     }
   )
 
+  // Update single conversion status
+  server.put<{ Params: { id: string }; Body: { status: string } }>(
+    '/conversions/:id',
+    async (request, reply) => {
+      const { id } = request.params
+      const { status } = request.body
+      if (!['PENDING', 'APPROVED', 'REJECTED'].includes(status)) {
+        return reply.code(400).send({ error: 'Invalid status' })
+      }
+      const conversion = await prisma.conversion.update({
+        where: { id },
+        data: { status: status as any },
+        include: { offer: { select: { name: true, mmpSource: true } }, publisher: { select: { name: true, email: true } } },
+      })
+      return conversion
+    }
+  )
+
+  // Bulk status update by sourceRefId or id
+  server.put<{ Body: { rows: Array<{ id?: string; sourceRefId?: string; status: string }> } }>(
+    '/conversions/bulk-status',
+    async (request, reply) => {
+      const { rows } = request.body
+      if (!Array.isArray(rows) || rows.length === 0) {
+        return reply.code(400).send({ error: 'No rows provided' })
+      }
+      const results: { success: number; failed: number; errors: string[] } = { success: 0, failed: 0, errors: [] }
+
+      for (const row of rows) {
+        try {
+          if (!['PENDING', 'APPROVED', 'REJECTED'].includes(row.status)) throw new Error(`Invalid status "${row.status}"`)
+          if (!row.id && !row.sourceRefId) throw new Error('Must provide id or source_ref_id')
+
+          const where = row.id ? { id: row.id } : { sourceType_sourceRefId: undefined as any }
+          if (row.sourceRefId && !row.id) {
+            const existing = await prisma.conversion.findFirst({ where: { sourceRefId: row.sourceRefId } })
+            if (!existing) throw new Error(`source_ref_id "${row.sourceRefId}" not found`)
+            await prisma.conversion.update({ where: { id: existing.id }, data: { status: row.status as any } })
+          } else {
+            await prisma.conversion.update({ where: { id: row.id }, data: { status: row.status as any } })
+          }
+          results.success++
+        } catch (err: any) {
+          results.failed++
+          results.errors.push(`Row ${results.success + results.failed}: ${err.message}`)
+        }
+      }
+      return results
+    }
+  )
+
   // Manual conversion bulk upload (CSV rows as JSON)
   server.post<{ Body: { rows: Array<{ publisherId: string; offerId: string; eventType: string; revenue?: number; eventAt: string; sourceRefId?: string }> } }>(
     '/conversions/bulk',
