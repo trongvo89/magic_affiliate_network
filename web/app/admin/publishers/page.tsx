@@ -47,7 +47,7 @@ export default function PublishersPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>
-              {['Publisher', 'Status', 'Conversions', 'Total Earned', 'Postback URL', 'Joined', 'Actions'].map((h) => (
+              {['Publisher', 'Publisher ID', 'Status', 'Conversions', 'Total Earned', 'Postback URL', 'Joined', 'Actions'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
               ))}
             </tr>
@@ -60,6 +60,16 @@ export default function PublishersPage() {
                   <td className="px-4 py-3">
                     <div className="font-medium text-gray-900">{p.name}</div>
                     <div className="text-xs text-gray-500">{p.email}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1">
+                      <code className="text-xs font-mono text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">{p.id.slice(0, 8)}…</code>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(p.id)}
+                        title="Copy full ID"
+                        className="text-gray-400 hover:text-gray-700 text-xs"
+                      >⎘</button>
+                    </div>
                   </td>
                   <td className="px-4 py-3">{statusBadge(p.status)}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{p._count.conversions}</td>

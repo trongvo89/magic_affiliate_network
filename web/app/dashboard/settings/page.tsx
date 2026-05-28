@@ -84,6 +84,18 @@ export default function SettingsPage() {
           <h2 className="font-semibold text-gray-900 mb-4">Profile</h2>
           <div className="space-y-4">
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Your Publisher ID</label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono bg-gray-50 text-gray-700 select-all">{profile.id}</code>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(profile.id)}
+                  className="text-sm text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap"
+                >Copy</button>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">Gửi ID này cho Admin để được gắn vào postback URL của advertiser.</p>
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
               <input
                 type="text"
