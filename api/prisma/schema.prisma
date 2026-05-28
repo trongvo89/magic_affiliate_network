@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String       @id @default(cuid())
+  email       String       @unique
+  password    String
+  name        String
+  role        Role         @default(PUBLISHER)
+  status      Status       @default(PENDING)
+  postbackUrl String?
+  createdAt   DateTime     @default(now())
+  conversions Conversion[]
+}
+
+enum Role {
+  ADMIN
+  PUBLISHER
+}
+
+enum Status {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+model Offer {
+  id              String       @id @default(cuid())
+  name            String
+  appName         String
+  appId           String       @unique
+  mmpSource       MmpSource
+  commissionType  CommType     @default(FLAT_CPA)
+  commissionValue Float
+  currency        String       @default("USD")
+  status          OfferStatus  @default(ACTIVE)
+  createdAt       DateTime     @default(now())
+  conversions     Conversion[]
+}
+
+enum MmpSource {
+  APPSFLYER
+  ADJUST
+}
+
+enum CommType {
+  FLAT_CPA
+  PERCENT_REVENUE
+}
+
+enum OfferStatus {
+  ACTIVE
+  PAUSED
+}
+
+model Conversion {
+  id               String     @id @default(cuid())
+  sourceType       MmpSource
+  sourceRefId      String
+  offerId          String
+  offer            Offer      @relation(fields: [offerId], references: [id])
+  publisherId      String?
+  publisher        User?      @relation(fields: [publisherId], references: [id])
+  eventType        String
+  revenue          Float      @default(0)
+  commissionAmount Float      @default(0)
+  currency         String     @default("USD")
+  status           ConvStatus @default(PENDING)
+  rawPayload       Json
+  postbackSent     Boolean    @default(false)
+  postbackSentAt   DateTime?
+  postbackStatus   Int?
+  receivedAt       DateTime   @default(now())
+  eventAt          DateTime
+
+  @@unique([sourceType, sourceRefId])
+  @@index([publisherId, eventAt(sort: Desc)])
+  @@index([offerId, status])
+}
+
+enum ConvStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}

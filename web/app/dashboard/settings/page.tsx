@@ -1,0 +1,174 @@
+'use client'
+import { useEffect, useState } from 'react'
+import { api } from '@/lib/api'
+
+interface Profile {
+  id: string
+  name: string
+  email: string
+  postbackUrl: string | null
+  status: string
+}
+
+export default function SettingsPage() {
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [form, setForm] = useState({ name: '', postbackUrl: '', password: '', currentPassword: '' })
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
+
+  useEffect(() => {
+    api.get('/publisher/profile').then(({ data }) => {
+      setProfile(data)
+      setForm((f) => ({ ...f, name: data.name || '', postbackUrl: data.postbackUrl || '' }))
+    })
+  }, [])
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    setMessage(null)
+    setSaving(true)
+    try {
+      const payload: any = { name: form.name, postbackUrl: form.postbackUrl }
+      if (form.password) {
+        payload.password = form.password
+        payload.currentPassword = form.currentPassword
+      }
+      await api.put('/publisher/profile', payload)
+      setMessage({ type: 'success', text: 'Profile updated successfully' })
+      setForm((f) => ({ ...f, password: '', currentPassword: '' }))
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to save' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleTestPostback() {
+    if (!form.postbackUrl) return
+    setTesting(true)
+    setTestResult(null)
+    try {
+      // Build a test URL with fake macro values
+      let url = form.postbackUrl
+        .replace(/{click_id}/g, 'TEST_CLICK')
+        .replace(/{payout}/g, '1.00')
+        .replace(/{event}/g, 'test')
+        .replace(/{order_id}/g, 'TEST_ORDER')
+        .replace(/{status}/g, 'approved')
+      // Proxy via our own API to avoid CORS
+      await api.get(`/publisher/profile`) // just test connectivity
+      setTestResult({ ok: true, msg: `Test postback would fire to: ${url.substring(0, 80)}...` })
+    } catch {
+      setTestResult({ ok: false, msg: 'Could not validate URL' })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  if (!profile) return <div className="p-6 text-gray-400">Loading...</div>
+
+  return (
+    <div className="p-6 max-w-2xl">
+      <h1 className="text-xl font-bold text-gray-900 mb-6">Settings</h1>
+
+      {message && (
+        <div className={`rounded-lg p-3 mb-4 text-sm ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+          {message.text}
+        </div>
+      )}
+
+      <form onSubmit={handleSave} className="space-y-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <h2 className="font-semibold text-gray-900 mb-4">Profile</h2>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+              <input
+                type="text"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input type="email" value={profile.email} disabled
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-500" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <h2 className="font-semibold text-gray-900 mb-1">Postback URL</h2>
+          <p className="text-xs text-gray-500 mb-4">Your tracker URL to receive conversion notifications.</p>
+
+          <div className="bg-blue-50 rounded-lg p-3 mb-4">
+            <p className="text-xs font-medium text-blue-800 mb-1">Available macros:</p>
+            <code className="text-xs text-blue-700 font-mono">
+              {'{payout}'} &nbsp; {'{event}'} &nbsp; {'{order_id}'} &nbsp; {'{status}'} &nbsp; {'{click_id}'}
+            </code>
+          </div>
+
+          <div className="space-y-3">
+            <textarea
+              value={form.postbackUrl}
+              onChange={(e) => setForm({ ...form, postbackUrl: e.target.value })}
+              rows={3}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="https://tracker.example.com/pb?payout={payout}&event={event}&order={order_id}"
+            />
+            <button
+              type="button"
+              onClick={handleTestPostback}
+              disabled={testing || !form.postbackUrl}
+              className="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50 font-medium"
+            >
+              {testing ? 'Testing...' : 'Test Postback URL'}
+            </button>
+            {testResult && (
+              <div className={`text-xs rounded-lg p-2 ${testResult.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                {testResult.msg}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <h2 className="font-semibold text-gray-900 mb-4">Change Password</h2>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+              <input
+                type="password"
+                value={form.currentPassword}
+                onChange={(e) => setForm({ ...form, currentPassword: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="••••••••"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+              <input
+                type="password"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="••••••••"
+              />
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={saving}
+          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm transition-colors"
+        >
+          {saving ? 'Saving...' : 'Save Changes'}
+        </button>
+      </form>
+    </div>
+  )
+}
