@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { api, fmtMoney, fmtDate } from '@/lib/api'
 
 interface Stats {
@@ -21,13 +21,27 @@ interface Conversion {
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [conversions, setConversions] = useState<Conversion[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  useEffect(() => {
-    Promise.all([api.get('/publisher/stats'), api.get('/publisher/conversions')]).then(([s, c]) => {
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const [s, c] = await Promise.all([
+        api.get('/publisher/stats'),
+        api.get('/publisher/conversions'),
+      ])
       setStats(s.data)
       setConversions(c.data.conversions)
-    })
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'Failed to load data')
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  useEffect(() => { load() }, [load])
 
   const statusBadge = (s: string) => {
     const cls: Record<string, string> = {
@@ -46,7 +60,25 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-xl font-bold text-gray-900 mb-6">My Overview</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-bold text-gray-900">My Overview</h1>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+        >
+          <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {loading ? 'Loading...' : 'Refresh'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-4">
+          {error}
+        </div>
+      )}
 
       {stats && (
         <div className="grid grid-cols-3 gap-4 mb-6">
@@ -89,8 +121,11 @@ export default function DashboardPage() {
                 <td className="px-4 py-2.5">{statusBadge(c.status)}</td>
               </tr>
             ))}
-            {conversions.length === 0 && (
+            {conversions.length === 0 && !loading && (
               <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No conversions yet</td></tr>
+            )}
+            {loading && conversions.length === 0 && (
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
             )}
           </tbody>
         </table>
