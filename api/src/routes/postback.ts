@@ -47,6 +47,9 @@ export default async function postbackRoutes(server: FastifyInstance) {
 
     const commissionAmount = calculateCommission(offer.commissionType as CommType, offer.commissionValue, revenue)
 
+    // PENDING if: no publisher attribution, publisher ID given but not found, or PERCENT_REVENUE with missing revenue
+    const status = determineStatus({ publisherId, publisher, commissionType: offer.commissionType as CommType, revenue })
+
     try {
       const conversion = await prisma.conversion.create({
         data: {
@@ -58,13 +61,13 @@ export default async function postbackRoutes(server: FastifyInstance) {
           revenue,
           commissionAmount,
           currency,
-          status: 'APPROVED',
+          status,
           rawPayload: rawPayload as any,
           eventAt,
         },
       })
 
-      if (publisher?.postbackUrl) {
+      if (status === 'APPROVED' && publisher?.postbackUrl) {
         setImmediate(() => sendOutboundPostback(prisma, conversion.id, publisher.postbackUrl!, {
           click_id: publisher.id,
           payout: String(commissionAmount),
@@ -99,6 +102,8 @@ export default async function postbackRoutes(server: FastifyInstance) {
 
     const commissionAmount = calculateCommission(offer.commissionType as CommType, offer.commissionValue, revenue)
 
+    const status = determineStatus({ publisherId, publisher, commissionType: offer.commissionType as CommType, revenue })
+
     try {
       const conversion = await prisma.conversion.create({
         data: {
@@ -110,13 +115,13 @@ export default async function postbackRoutes(server: FastifyInstance) {
           revenue,
           commissionAmount,
           currency,
-          status: 'APPROVED',
+          status,
           rawPayload: rawPayload as any,
           eventAt,
         },
       })
 
-      if (publisher?.postbackUrl) {
+      if (status === 'APPROVED' && publisher?.postbackUrl) {
         setImmediate(() => sendOutboundPostback(prisma, conversion.id, publisher.postbackUrl!, {
           click_id: publisher.id,
           payout: String(commissionAmount),
@@ -159,4 +164,24 @@ export default async function postbackRoutes(server: FastifyInstance) {
 function calculateCommission(type: CommType, value: number, revenue: number): number {
   if (type === CommType.FLAT_CPA) return value
   return parseFloat((revenue * value / 100).toFixed(2))
+}
+
+function determineStatus({
+  publisherId,
+  publisher,
+  commissionType,
+  revenue,
+}: {
+  publisherId: string | undefined
+  publisher: { id: string } | null
+  commissionType: CommType
+  revenue: number
+}): 'APPROVED' | 'PENDING' {
+  // Publisher ID passed but not found in DB → wrong attribution
+  if (publisherId && !publisher) return 'PENDING'
+  // No publisher ID at all → cannot attribute commission
+  if (!publisherId) return 'PENDING'
+  // PERCENT_REVENUE but revenue = 0 → commission would be $0, data incomplete
+  if (commissionType === CommType.PERCENT_REVENUE && revenue === 0) return 'PENDING'
+  return 'APPROVED'
 }
