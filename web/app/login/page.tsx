@@ -57,7 +57,7 @@ export default function LoginPage() {
           <div className="p-8">
             {/* Logo */}
             <div className="flex flex-col items-center mb-8">
-              <LogoMark className="w-12 h-14 mb-3" />
+              <LogoMark size={56} />
               <h1 className="text-xl font-bold text-slate-900 tracking-tight">Magic Media Affiliate</h1>
               <p className="text-slate-400 text-sm mt-1">Performance Marketing Network</p>
             </div>

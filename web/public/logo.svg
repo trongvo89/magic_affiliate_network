@@ -1,0 +1,54 @@
+<svg viewBox="0 0 100 95" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="mg" x1="10" y1="4" x2="90" y2="90" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#FFD600"/>
+      <stop offset="35%"  stop-color="#FFAA00"/>
+      <stop offset="70%"  stop-color="#FF6B00"/>
+      <stop offset="100%" stop-color="#E83D00"/>
+    </linearGradient>
+    <!-- inner fold shadow overlay -->
+    <linearGradient id="sh" x1="40" y1="20" x2="60" y2="80" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#FF8800" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#C03000" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Solid M shape with upward arrow on right peak -->
+  <path d="
+    M 4,88
+    L 4,20
+    C 4,12 10,5 18,8
+    C 26,11 38,35 50,55
+    C 62,35 72,10 80,5
+    C 82,3 86,1 90,4
+    C 94,7 96,12 94,18
+    L 94,88
+    L 82,88
+    L 82,24
+    C 70,44 60,64 50,68
+    C 40,64 30,44 18,24
+    L 18,88
+    Z
+  " fill="url(#mg)"/>
+
+  <!-- Upward arrow chevron at right peak -->
+  <path d="
+    M 78,6
+    C 80,2 86,0 92,3
+    L 86,12
+    C 84,8 80,8 78,12
+    Z
+  " fill="#FFE000"/>
+
+  <!-- Inner fold shadow for depth -->
+  <path d="
+    M 50,55
+    C 44,45 38,35 18,24
+    L 18,36
+    C 34,44 44,56 50,68
+    C 56,56 66,44 82,36
+    L 82,24
+    C 62,35 56,45 50,55
+    Z
+  " fill="url(#sh)"/>
+</svg>

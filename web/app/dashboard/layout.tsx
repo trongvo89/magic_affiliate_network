@@ -55,7 +55,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Logo */}
         <div className="px-5 py-5 border-b border-white/10">
           <div className="flex items-center gap-3">
-            <LogoMark className="w-8 h-9 flex-shrink-0" />
+            <LogoMark size={36} />
             <div className="min-w-0">
               <div className="font-bold text-white text-sm leading-tight">Magic Media</div>
               <div className="text-orange-400 text-xs font-medium">Affiliate</div>
