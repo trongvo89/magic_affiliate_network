@@ -1,6 +1,10 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { api, fmtMoney } from '@/lib/api'
+
+function toDateStr(d: Date) {
+  return d.toISOString().slice(0, 10)
+}
 
 interface Offer {
   id: string
@@ -30,6 +34,22 @@ interface OfferSummary {
   commissionPaid: number
   totalRevenue: number
   publisherCount: number
+  clicks: number
+  cvr: number
+  epc: number
+}
+
+interface PubBreakdown {
+  publisherId: string
+  publisherName: string
+  publisherEmail: string
+  clicks: number
+  approved: number
+  pending: number
+  rejected: number
+  commission: number
+  cvr: number
+  epc: number
 }
 
 const empty = { name: '', appName: '', appId: '', mmpSource: 'APPSFLYER', commissionType: 'FLAT_CPA', commissionValue: '', currency: 'USD', destinationUrl: '', pubCommissionDisplay: '' }
@@ -44,27 +64,48 @@ export default function OffersPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [loadingPerf, setLoadingPerf] = useState(false)
+  const [from, setFrom] = useState(() => toDateStr(new Date(Date.now() - 30 * 86400000)))
+  const [to, setTo] = useState(() => toDateStr(new Date()))
+  const [expandedOfferId, setExpandedOfferId] = useState<string | null>(null)
+  const [breakdown, setBreakdown] = useState<Record<string, PubBreakdown[]>>({})
+  const [loadingBreakdown, setLoadingBreakdown] = useState<string | null>(null)
 
   async function loadOffers() {
     const { data } = await api.get('/admin/offers')
     setOffers(data)
   }
 
-  async function loadSummary() {
+  const loadSummary = useCallback(async () => {
     setLoadingPerf(true)
+    setBreakdown({})
+    setExpandedOfferId(null)
     try {
-      const { data } = await api.get('/admin/offers-summary')
+      const { data } = await api.get('/admin/offers-summary', { params: { from, to } })
       setSummary(data)
     } finally {
       setLoadingPerf(false)
+    }
+  }, [from, to])
+
+  async function toggleExpand(offerId: string) {
+    if (expandedOfferId === offerId) { setExpandedOfferId(null); return }
+    setExpandedOfferId(offerId)
+    if (!breakdown[offerId]) {
+      setLoadingBreakdown(offerId)
+      try {
+        const { data } = await api.get(`/admin/offers/${offerId}/publisher-breakdown`, { params: { from, to } })
+        setBreakdown(prev => ({ ...prev, [offerId]: data }))
+      } finally {
+        setLoadingBreakdown(null)
+      }
     }
   }
 
   useEffect(() => { loadOffers() }, [])
 
   useEffect(() => {
-    if (tab === 'performance' && summary.length === 0) loadSummary()
-  }, [tab])
+    if (tab === 'performance') loadSummary()
+  }, [tab, loadSummary])
 
   function openCreate() {
     setEditingOffer(null)
@@ -134,6 +175,7 @@ export default function OffersPage() {
   const totalCommission = summary.reduce((s, d) => s + d.commissionPaid, 0)
   const totalRevenue = summary.reduce((s, d) => s + d.totalRevenue, 0)
   const totalConversions = summary.reduce((s, d) => s + d.total, 0)
+  const totalClicks = summary.reduce((s, d) => s + (d.clicks ?? 0), 0)
 
   return (
     <div className="p-6">
@@ -164,16 +206,27 @@ export default function OffersPage() {
           </button>
         )}
         {tab === 'performance' && (
-          <button
-            onClick={loadSummary}
-            disabled={loadingPerf}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
-          >
-            <svg className={`w-4 h-4 ${loadingPerf ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            {loadingPerf ? 'Loading...' : 'Refresh'}
-          </button>
+          <div className="flex items-center gap-2">
+            <input type="date" value={from} max={to} onChange={e => setFrom(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+            <span className="text-gray-400">→</span>
+            <input type="date" value={to} min={from} onChange={e => setTo(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+            {[{ label: '7d', days: 7 }, { label: '30d', days: 30 }, { label: '90d', days: 90 }].map(({ label, days }) => (
+              <button key={label}
+                onClick={() => { setFrom(toDateStr(new Date(Date.now() - days * 86400000))); setTo(toDateStr(new Date())) }}
+                className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+              >{label}</button>
+            ))}
+            <button onClick={loadSummary} disabled={loadingPerf}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
+              <svg className={`w-4 h-4 ${loadingPerf ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {loadingPerf ? 'Loading...' : 'Refresh'}
+            </button>
+          </div>
         )}
       </div>
 
@@ -244,7 +297,7 @@ export default function OffersPage() {
             <div className="grid grid-cols-4 gap-4 mb-6">
               {[
                 { label: 'Offers with Activity', value: summary.length, fmt: false, color: 'text-gray-900' },
-                { label: 'Total Conversions', value: totalConversions, fmt: false, color: 'text-gray-900' },
+                { label: 'Total Clicks', value: totalClicks, fmt: false, color: 'text-gray-900' },
                 { label: 'Total Revenue', value: totalRevenue, fmt: true, color: 'text-blue-700' },
                 { label: 'Commission Paid', value: totalCommission, fmt: true, color: 'text-green-600' },
               ].map((card) => (
@@ -262,34 +315,90 @@ export default function OffersPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                 <tr>
-                  {['Offer', 'MMP', 'Publishers', 'Total', 'Approved', 'Pending', 'Rejected', 'Revenue', 'Commission Paid'].map((h) => (
+                  {['Offer', 'MMP', 'Clicks', 'Approved', 'Pending', 'Rejected', 'CVR', 'EPC', 'Revenue', 'Commission', 'Pubs'].map((h) => (
                     <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {summary.map((row) => (
-                  <tr key={row.offerId} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{row.offerName}</div>
-                      <span className={`text-xs ${row.offerStatus === 'ACTIVE' ? 'text-green-600' : 'text-gray-400'}`}>{row.offerStatus}</span>
-                    </td>
-                    <td className="px-4 py-3">{mmpBadge(row.mmpSource)}</td>
-                    <td className="px-4 py-3 text-gray-700 font-medium">{row.publisherCount}</td>
-                    <td className="px-4 py-3 font-medium text-gray-900">{row.total}</td>
-                    <td className="px-4 py-3 font-medium text-green-700">{row.approved}</td>
-                    <td className="px-4 py-3 font-medium text-yellow-600">{row.pending}</td>
-                    <td className="px-4 py-3 font-medium text-red-500">{row.rejected}</td>
-                    <td className="px-4 py-3 text-blue-700 font-medium">{fmtMoney(row.totalRevenue, row.currency)}</td>
-                    <td className="px-4 py-3 font-semibold text-green-700">{fmtMoney(row.commissionPaid, row.currency)}</td>
-                  </tr>
-                ))}
-                {summary.length === 0 && !loadingPerf && (
-                  <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No conversion data yet</td></tr>
-                )}
                 {loadingPerf && (
-                  <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
+                  <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
                 )}
+                {!loadingPerf && summary.length === 0 && (
+                  <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">No data for this period</td></tr>
+                )}
+                {summary.flatMap((row) => {
+                  const isExpanded = expandedOfferId === row.offerId
+                  const bkd = breakdown[row.offerId]
+                  return [
+                    <tr key={row.offerId}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => toggleExpand(row.offerId)}
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-gray-400 text-xs transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+                          <div>
+                            <div className="font-medium text-gray-900">{row.offerName}</div>
+                            <span className={`text-xs ${row.offerStatus === 'ACTIVE' ? 'text-green-600' : 'text-gray-400'}`}>{row.offerStatus}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">{mmpBadge(row.mmpSource)}</td>
+                      <td className="px-4 py-3 font-medium text-gray-900">{row.clicks ?? 0}</td>
+                      <td className="px-4 py-3 font-medium text-green-700">{row.approved}</td>
+                      <td className="px-4 py-3 font-medium text-yellow-600">{row.pending}</td>
+                      <td className="px-4 py-3 font-medium text-red-500">{row.rejected}</td>
+                      <td className="px-4 py-3 text-blue-600 font-medium">{(row.clicks ?? 0) > 0 ? `${row.cvr}%` : '—'}</td>
+                      <td className="px-4 py-3 text-indigo-600 font-medium">{(row.clicks ?? 0) > 0 ? `$${row.epc}` : '—'}</td>
+                      <td className="px-4 py-3 text-blue-700 font-medium">{fmtMoney(row.totalRevenue, row.currency)}</td>
+                      <td className="px-4 py-3 font-semibold text-green-700">{fmtMoney(row.commissionPaid, row.currency)}</td>
+                      <td className="px-4 py-3 text-gray-600">{row.publisherCount}</td>
+                    </tr>,
+                    isExpanded ? (
+                      <tr key={`${row.offerId}-detail`}>
+                        <td colSpan={11} className="p-0">
+                          <div className="bg-slate-50 border-t border-slate-200 px-6 py-4">
+                            {loadingBreakdown === row.offerId && (
+                              <p className="text-sm text-gray-400 text-center py-2">Loading publisher breakdown...</p>
+                            )}
+                            {bkd && bkd.length === 0 && (
+                              <p className="text-sm text-gray-400 text-center py-2">No publisher data for this period</p>
+                            )}
+                            {bkd && bkd.length > 0 && (
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="text-gray-500 uppercase">
+                                    {['Publisher', 'Clicks', 'Approved', 'Pending', 'Rejected', 'CVR', 'EPC', 'Commission'].map(h => (
+                                      <th key={h} className="pb-2 text-left font-medium pr-4">{h}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200">
+                                  {bkd.map(p => (
+                                    <tr key={p.publisherId} className="hover:bg-slate-100">
+                                      <td className="py-2 pr-4">
+                                        <div className="font-medium text-gray-900">{p.publisherName}</div>
+                                        <div className="text-gray-400">{p.publisherEmail}</div>
+                                      </td>
+                                      <td className="py-2 pr-4 font-medium text-gray-900">{p.clicks}</td>
+                                      <td className="py-2 pr-4 font-medium text-green-700">{p.approved}</td>
+                                      <td className="py-2 pr-4 font-medium text-yellow-600">{p.pending}</td>
+                                      <td className="py-2 pr-4 font-medium text-red-500">{p.rejected}</td>
+                                      <td className="py-2 pr-4 text-blue-600">{p.clicks > 0 ? `${p.cvr}%` : '—'}</td>
+                                      <td className="py-2 pr-4 text-indigo-600">{p.clicks > 0 ? `$${p.epc}` : '—'}</td>
+                                      <td className="py-2 font-semibold text-green-700">{fmtMoney(p.commission, row.currency)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null,
+                  ].filter(Boolean)
+                })}
               </tbody>
             </table>
           </div>

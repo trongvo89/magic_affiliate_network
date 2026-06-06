@@ -75,14 +75,37 @@ export default async function adminRoutes(server: FastifyInstance) {
     return offers
   })
 
-  server.get('/offers-summary', async () => {
-    const grouped = await prisma.conversion.groupBy({
-      by: ['offerId', 'status'],
-      _count: { id: true },
-      _sum: { commissionAmount: true, revenue: true },
-    })
+  server.get<{ Querystring: { from?: string; to?: string } }>('/offers-summary', async (request) => {
+    const { from, to } = request.query
 
-    const offerIds = [...new Set(grouped.map(g => g.offerId))]
+    const buildRange = () => {
+      if (!from && !to) return null
+      const r: any = {}
+      if (from) r.gte = new Date(from)
+      if (to) { const d = new Date(to); d.setHours(23, 59, 59, 999); r.lte = d }
+      return r
+    }
+    const range = buildRange()
+    const convWhere: any = range ? { eventAt: range } : {}
+    const clickWhere: any = range ? { clickedAt: range } : {}
+
+    const [grouped, clickGroups] = await Promise.all([
+      prisma.conversion.groupBy({
+        by: ['offerId', 'status'],
+        where: convWhere,
+        _count: { id: true },
+        _sum: { commissionAmount: true, revenue: true },
+      }),
+      prisma.click.groupBy({
+        by: ['offerId'],
+        where: clickWhere,
+        _count: { id: true },
+      }),
+    ])
+
+    const convOfferIds = grouped.map(g => g.offerId)
+    const clickOfferIds = clickGroups.map(g => g.offerId).filter((id): id is string => id !== null)
+    const offerIds = [...new Set([...convOfferIds, ...clickOfferIds])]
 
     const [offers, pubGroups] = await Promise.all([
       prisma.offer.findMany({
@@ -91,7 +114,7 @@ export default async function adminRoutes(server: FastifyInstance) {
       }),
       prisma.conversion.groupBy({
         by: ['offerId', 'publisherId'],
-        where: { offerId: { in: offerIds }, publisherId: { not: null } },
+        where: { ...convWhere, offerId: { in: offerIds }, publisherId: { not: null } },
         _count: { id: true },
       }),
     ])
@@ -101,22 +124,33 @@ export default async function adminRoutes(server: FastifyInstance) {
     for (const row of pubGroups) {
       pubCountMap[row.offerId] = (pubCountMap[row.offerId] ?? 0) + 1
     }
+    const clickMap: Record<string, number> = {}
+    for (const g of clickGroups) {
+      if (g.offerId) clickMap[g.offerId] = g._count.id
+    }
 
     const summary: Record<string, any> = {}
+
+    for (const offerId of clickOfferIds) {
+      const o = offerMap[offerId]
+      if (!o) continue
+      summary[offerId] = {
+        offerId, offerName: o.name, mmpSource: o.mmpSource, commissionType: o.commissionType,
+        currency: o.currency, offerStatus: o.status,
+        total: 0, approved: 0, pending: 0, rejected: 0, commissionPaid: 0, totalRevenue: 0,
+        publisherCount: pubCountMap[offerId] ?? 0, clicks: clickMap[offerId] ?? 0,
+      }
+    }
+
     for (const row of grouped) {
       if (!summary[row.offerId]) {
         const o = offerMap[row.offerId]
+        if (!o) continue
         summary[row.offerId] = {
-          offerId: row.offerId,
-          offerName: o?.name ?? 'Unknown',
-          mmpSource: o?.mmpSource ?? '',
-          commissionType: o?.commissionType ?? '',
-          currency: o?.currency ?? 'USD',
-          offerStatus: o?.status ?? '',
-          total: 0, approved: 0, pending: 0, rejected: 0,
-          commissionPaid: 0,
-          totalRevenue: 0,
-          publisherCount: pubCountMap[row.offerId] ?? 0,
+          offerId: row.offerId, offerName: o.name, mmpSource: o.mmpSource, commissionType: o.commissionType,
+          currency: o.currency, offerStatus: o.status,
+          total: 0, approved: 0, pending: 0, rejected: 0, commissionPaid: 0, totalRevenue: 0,
+          publisherCount: pubCountMap[row.offerId] ?? 0, clicks: clickMap[row.offerId] ?? 0,
         }
       }
       const s = summary[row.offerId]
@@ -130,8 +164,87 @@ export default async function adminRoutes(server: FastifyInstance) {
       if (row.status === 'REJECTED') s.rejected = row._count.id
     }
 
+    for (const row of Object.values(summary)) {
+      const clicks = (row.clicks ?? 0) as number
+      row.cvr = clicks > 0 ? parseFloat(((row.approved / clicks) * 100).toFixed(2)) : 0
+      row.epc = clicks > 0 ? parseFloat((row.commissionPaid / clicks).toFixed(4)) : 0
+    }
+
     return Object.values(summary).sort((a: any, b: any) => b.total - a.total)
   })
+
+  server.get<{ Params: { id: string }; Querystring: { from?: string; to?: string } }>(
+    '/offers/:id/publisher-breakdown',
+    async (request) => {
+      const { id: offerId } = request.params
+      const { from, to } = request.query
+
+      const buildRange = () => {
+        if (!from && !to) return null
+        const r: any = {}
+        if (from) r.gte = new Date(from)
+        if (to) { const d = new Date(to); d.setHours(23, 59, 59, 999); r.lte = d }
+        return r
+      }
+      const range = buildRange()
+      const clickWhere: any = { offerId }
+      const convWhere: any = { offerId, publisherId: { not: null } }
+      if (range) { clickWhere.clickedAt = range; convWhere.eventAt = range }
+
+      const [clickGroups, convGroups] = await Promise.all([
+        prisma.click.groupBy({ by: ['publisherId'], where: clickWhere, _count: { id: true } }),
+        prisma.conversion.groupBy({
+          by: ['publisherId', 'status'],
+          where: convWhere,
+          _count: { id: true },
+          _sum: { commissionAmount: true },
+        }),
+      ])
+
+      const pubIds = [...new Set([
+        ...clickGroups.map(g => g.publisherId).filter((id): id is string => id !== null),
+        ...convGroups.map(g => g.publisherId).filter((id): id is string => id !== null),
+      ])]
+
+      const publishers = await prisma.user.findMany({
+        where: { id: { in: pubIds } },
+        select: { id: true, name: true, email: true },
+      })
+      const pubMap = Object.fromEntries(publishers.map(p => [p.id, p]))
+
+      const clickMap: Record<string, number> = {}
+      for (const g of clickGroups) {
+        if (g.publisherId) clickMap[g.publisherId] = g._count.id
+      }
+
+      const convMap: Record<string, { approved: number; pending: number; rejected: number; commission: number }> = {}
+      for (const g of convGroups) {
+        if (!g.publisherId) continue
+        if (!convMap[g.publisherId]) convMap[g.publisherId] = { approved: 0, pending: 0, rejected: 0, commission: 0 }
+        if (g.status === 'APPROVED') { convMap[g.publisherId].approved = g._count.id; convMap[g.publisherId].commission = parseFloat((g._sum.commissionAmount ?? 0).toFixed(2)) }
+        if (g.status === 'PENDING') convMap[g.publisherId].pending = g._count.id
+        if (g.status === 'REJECTED') convMap[g.publisherId].rejected = g._count.id
+      }
+
+      return pubIds.map(pubId => {
+        const clicks = clickMap[pubId] ?? 0
+        const conv = convMap[pubId] ?? { approved: 0, pending: 0, rejected: 0, commission: 0 }
+        const pub = pubMap[pubId]
+        return {
+          publisherId: pubId,
+          publisherName: pub?.name ?? 'Unknown',
+          publisherEmail: pub?.email ?? '',
+          clicks,
+          approved: conv.approved,
+          pending: conv.pending,
+          rejected: conv.rejected,
+          commission: conv.commission,
+          cvr: clicks > 0 ? parseFloat(((conv.approved / clicks) * 100).toFixed(2)) : 0,
+          epc: clicks > 0 ? parseFloat((conv.commission / clicks).toFixed(4)) : 0,
+        }
+      }).sort((a, b) => (b.approved + b.clicks) - (a.approved + a.clicks))
+    }
+  )
 
   server.post<{ Body: { name: string; appName: string; appId: string; mmpSource: string; commissionType: string; commissionValue: number; currency: string; destinationUrl?: string; pubCommissionDisplay?: string } }>(
     '/offers',

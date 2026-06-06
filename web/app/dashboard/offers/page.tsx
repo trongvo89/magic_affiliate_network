@@ -2,6 +2,10 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api, fmtMoney, getUser } from '@/lib/api'
 
+function toDateStr(d: Date) {
+  return d.toISOString().slice(0, 10)
+}
+
 interface OfferSummary {
   offerId: string
   offerName: string
@@ -13,6 +17,9 @@ interface OfferSummary {
   rejected: number
   commissionEarned: number
   totalRevenue: number
+  clicks: number
+  cvr: number
+  epc: number
 }
 
 interface CityAdsOffer {
@@ -28,6 +35,8 @@ export default function PublisherOffersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState<string | null>(null)
+  const [from, setFrom] = useState(() => toDateStr(new Date(Date.now() - 30 * 86400000)))
+  const [to, setTo] = useState(() => toDateStr(new Date()))
   const pubId = getUser()?.id ?? ''
 
   const load = useCallback(async () => {
@@ -35,7 +44,7 @@ export default function PublisherOffersPage() {
     setError('')
     try {
       const [summaryRes, cityAdsRes] = await Promise.all([
-        api.get('/publisher/offers-summary'),
+        api.get('/publisher/offers-summary', { params: { from, to } }),
         api.get('/publisher/cityads-offers'),
       ])
       setData(summaryRes.data)
@@ -45,7 +54,7 @@ export default function PublisherOffersPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [from, to])
 
   useEffect(() => { load() }, [load])
 
@@ -72,21 +81,33 @@ export default function PublisherOffersPage() {
 
   const totalCommission = data.reduce((s, d) => s + d.commissionEarned, 0)
   const totalConversions = data.reduce((s, d) => s + d.total, 0)
+  const totalClicks = data.reduce((s, d) => s + (d.clicks ?? 0), 0)
 
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-gray-900">Offers Performance</h1>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
-        >
-          <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          {loading ? 'Loading...' : 'Refresh'}
-        </button>
+        <div className="flex items-center gap-2">
+          <input type="date" value={from} max={to} onChange={e => setFrom(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+          <span className="text-gray-400">→</span>
+          <input type="date" value={to} min={from} onChange={e => setTo(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+          {[{ label: '7d', days: 7 }, { label: '30d', days: 30 }, { label: '90d', days: 90 }].map(({ label, days }) => (
+            <button key={label}
+              onClick={() => { setFrom(toDateStr(new Date(Date.now() - days * 86400000))); setTo(toDateStr(new Date())) }}
+              className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+            >{label}</button>
+          ))}
+          <button onClick={load} disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          >
+            <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {loading ? 'Loading...' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -94,10 +115,11 @@ export default function PublisherOffersPage() {
       )}
 
       {data.length > 0 && (
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-4 gap-4 mb-6">
           {[
             { label: 'Active Offers', value: data.length, fmt: false, color: 'text-gray-900' },
-            { label: 'Total Conversions', value: totalConversions, fmt: false, color: 'text-gray-900' },
+            { label: 'Clicks', value: totalClicks, fmt: false, color: 'text-gray-900' },
+            { label: 'Approved Conversions', value: data.reduce((s, d) => s + d.approved, 0), fmt: false, color: 'text-gray-900' },
             { label: 'Commission Earned', value: totalCommission, fmt: true, color: 'text-green-600' },
           ].map((card) => (
             <div key={card.label} className="bg-white rounded-xl p-5 border border-gray-200">
@@ -165,7 +187,7 @@ export default function PublisherOffersPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>
-              {['Offer', 'MMP', 'Total', 'Approved', 'Pending', 'Rejected', 'Commission Earned'].map((h) => (
+              {['Offer', 'Clicks', 'Approved', 'Pending', 'Rejected', 'CVR', 'EPC', 'Commission Earned'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
               ))}
             </tr>
@@ -174,19 +196,20 @@ export default function PublisherOffersPage() {
             {data.map((row) => (
               <tr key={row.offerId} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium text-gray-900">{row.offerName}</td>
-                <td className="px-4 py-3">{mmpBadge(row.mmpSource)}</td>
-                <td className="px-4 py-3 font-medium text-gray-900">{row.total}</td>
+                <td className="px-4 py-3 font-medium text-gray-900">{row.clicks ?? 0}</td>
                 <td className="px-4 py-3 font-medium text-green-700">{row.approved}</td>
                 <td className="px-4 py-3 font-medium text-yellow-600">{row.pending}</td>
                 <td className="px-4 py-3 font-medium text-red-500">{row.rejected}</td>
+                <td className="px-4 py-3 text-blue-600 font-medium">{(row.clicks ?? 0) > 0 ? `${row.cvr}%` : '—'}</td>
+                <td className="px-4 py-3 text-indigo-600 font-medium">{(row.clicks ?? 0) > 0 ? `$${row.epc}` : '—'}</td>
                 <td className="px-4 py-3 font-semibold text-green-700">{fmtMoney(row.commissionEarned, row.currency)}</td>
               </tr>
             ))}
             {data.length === 0 && !loading && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No offer data yet</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No offer data for this period</td></tr>
             )}
             {loading && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
             )}
           </tbody>
         </table>
