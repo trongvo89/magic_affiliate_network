@@ -60,14 +60,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="flex h-screen bg-slate-50">
       <aside className="w-60 bg-[#0F172A] flex flex-col flex-shrink-0">
-        {/* Logo */}
-        <div className="px-5 py-5 border-b border-white/10">
-          <div className="flex items-center gap-3">
-            <LogoMark size={36} />
-            <div className="min-w-0">
-              <div className="font-bold text-white text-sm leading-tight">Magic Media</div>
-              <div className="text-orange-400 text-xs font-medium">Affiliate</div>
-            </div>
+        {/* Logo — PNG has dark bg, blends with sidebar */}
+        <div className="px-3 pt-3 pb-2 border-b border-white/10">
+          <div className="flex items-center gap-2">
+            <LogoMark size={52} />
+            <div className="text-orange-400 text-xs font-semibold tracking-wide">Affiliate</div>
           </div>
         </div>
 

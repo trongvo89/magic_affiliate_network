@@ -50,17 +50,19 @@ export default function LoginPage() {
       <div className="absolute -bottom-48 -left-48 w-96 h-96 bg-amber-400/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative w-full max-w-md px-4">
+        {/* Logo above card — on dark background so PNG blends naturally */}
+        <div className="flex flex-col items-center mb-6">
+          <LogoMark size={120} />
+          <p className="text-slate-400 text-sm mt-1 tracking-wide">Performance Marketing Network</p>
+        </div>
+
         <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
           {/* Top accent bar */}
           <div className="h-1 bg-gradient-to-r from-amber-400 via-orange-500 to-orange-600" />
 
           <div className="p-8">
-            {/* Logo */}
-            <div className="flex flex-col items-center mb-8">
-              <LogoMark size={56} />
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">Magic Media Affiliate</h1>
-              <p className="text-slate-400 text-sm mt-1">Performance Marketing Network</p>
-            </div>
+            {/* Title inside card */}
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight text-center mb-6">Sign in to your account</h1>
 
             {/* Tabs */}
             <div className="flex rounded-lg bg-slate-100 p-1 mb-6">
