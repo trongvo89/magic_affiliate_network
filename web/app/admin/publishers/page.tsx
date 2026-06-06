@@ -13,13 +13,29 @@ interface Publisher {
   conversions: { commissionAmount: number }[]
 }
 
+interface PubStat {
+  publisherId: string
+  clicks: number
+  approvedConversions: number
+  totalCommission: number
+  cvr: number
+  epc: number
+}
+
 export default function PublishersPage() {
   const [publishers, setPublishers] = useState<Publisher[]>([])
+  const [statsMap, setStatsMap] = useState<Record<string, PubStat>>({})
   const [actionId, setActionId] = useState<string | null>(null)
 
   async function load() {
-    const { data } = await api.get('/admin/publishers')
-    setPublishers(data)
+    const [{ data: pubs }, { data: stats }] = await Promise.all([
+      api.get('/admin/publishers'),
+      api.get('/admin/publisher-stats'),
+    ])
+    setPublishers(pubs)
+    const map: Record<string, PubStat> = {}
+    for (const s of stats) map[s.publisherId] = s
+    setStatsMap(map)
   }
   useEffect(() => { load() }, [])
 
@@ -43,18 +59,18 @@ export default function PublishersPage() {
     <div className="p-6">
       <h1 className="text-xl font-bold text-gray-900 mb-6">Publishers</h1>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>
-              {['Publisher', 'Publisher ID', 'Status', 'Conversions', 'Total Earned', 'Postback URL', 'Joined', 'Actions'].map((h) => (
-                <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
+              {['Publisher', 'Publisher ID', 'Status', 'Clicks', 'Conversions', 'CVR', 'EPC', 'Earned', 'Joined', 'Actions'].map((h) => (
+                <th key={h} className="px-4 py-3 text-left font-medium whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {publishers.map((p) => {
-              const totalEarned = p.conversions.reduce((s, c) => s + c.commissionAmount, 0)
+              const st = statsMap[p.id]
               return (
                 <tr key={p.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
@@ -72,13 +88,19 @@ export default function PublishersPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">{statusBadge(p.status)}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{p._count.conversions}</td>
-                  <td className="px-4 py-3 font-medium text-green-700">{fmtMoney(totalEarned)}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">{st?.clicks ?? 0}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">{st?.approvedConversions ?? 0}</td>
                   <td className="px-4 py-3">
-                    {p.postbackUrl
-                      ? <span className="text-xs font-mono text-gray-500 truncate block max-w-[200px]" title={p.postbackUrl}>{p.postbackUrl}</span>
-                      : <span className="text-xs text-gray-400">Not set</span>}
+                    <span className={`font-medium ${(st?.cvr ?? 0) > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                      {st?.clicks ? `${st.cvr}%` : '—'}
+                    </span>
                   </td>
+                  <td className="px-4 py-3">
+                    <span className={`font-medium ${(st?.epc ?? 0) > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                      {st?.clicks ? `$${st.epc}` : '—'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 font-medium text-green-700">{fmtMoney(st?.totalCommission ?? 0)}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{fmtDate(p.createdAt)}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
@@ -106,7 +128,7 @@ export default function PublishersPage() {
               )
             })}
             {publishers.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No publishers yet</td></tr>
+              <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">No publishers yet</td></tr>
             )}
           </tbody>
         </table>

@@ -3,8 +3,11 @@ import { useEffect, useState, useCallback } from 'react'
 import { api, fmtMoney, fmtDate } from '@/lib/api'
 
 interface Stats {
-  month: { conversions: number; earned: number }
+  month: { conversions: number; earned: number; clicks: number }
   totalApproved: number
+  totalClicks: number
+  cvr: number
+  epc: number
 }
 
 interface Conversion {
@@ -88,7 +91,10 @@ export default function DashboardPage() {
       {stats && (
         <div className="grid grid-cols-3 gap-4 mb-6">
           {[
+            { label: 'Clicks (30d)', value: stats.month.clicks, format: false, color: 'text-gray-900' },
             { label: 'Conversions (30d)', value: stats.month.conversions, format: false, color: 'text-gray-900' },
+            { label: 'CVR', value: stats.totalClicks > 0 ? `${stats.cvr}%` : '—', format: false, color: stats.cvr > 0 ? 'text-blue-600' : 'text-gray-400' },
+            { label: 'EPC', value: stats.totalClicks > 0 ? `$${stats.epc}` : '—', format: false, color: stats.epc > 0 ? 'text-indigo-600' : 'text-gray-400' },
             { label: 'Earned Pending', value: pendingEarned, format: true, color: 'text-yellow-600' },
             { label: 'Earned Approved', value: stats.totalApproved, format: true, color: 'text-green-600' },
           ].map((card) => (

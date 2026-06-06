@@ -319,6 +319,42 @@ export default async function adminRoutes(server: FastifyInstance) {
     }
   )
 
+  // Per-publisher click + conversion stats (for CVR/EPC)
+  server.get('/publisher-stats', async () => {
+    const [clickGroups, approvedGroups] = await Promise.all([
+      prisma.click.groupBy({ by: ['publisherId'], _count: { id: true } }),
+      prisma.conversion.groupBy({
+        by: ['publisherId'],
+        where: { publisherId: { not: null }, status: 'APPROVED' },
+        _count: { id: true },
+        _sum: { commissionAmount: true },
+      }),
+    ])
+
+    const clickMap: Record<string, number> = {}
+    for (const g of clickGroups) {
+      if (g.publisherId) clickMap[g.publisherId] = g._count.id
+    }
+    const approvedMap: Record<string, { count: number; commission: number }> = {}
+    for (const g of approvedGroups) {
+      if (g.publisherId) approvedMap[g.publisherId] = { count: g._count.id, commission: g._sum.commissionAmount ?? 0 }
+    }
+
+    const allIds = [...new Set([...Object.keys(clickMap), ...Object.keys(approvedMap)])]
+    return allIds.map(pubId => {
+      const clicks = clickMap[pubId] ?? 0
+      const approved = approvedMap[pubId] ?? { count: 0, commission: 0 }
+      return {
+        publisherId: pubId,
+        clicks,
+        approvedConversions: approved.count,
+        totalCommission: approved.commission,
+        cvr: clicks > 0 ? parseFloat(((approved.count / clicks) * 100).toFixed(2)) : 0,
+        epc: clicks > 0 ? parseFloat((approved.commission / clicks).toFixed(4)) : 0,
+      }
+    })
+  })
+
   // Publishers
   server.get('/publishers', async () => {
     return prisma.user.findMany({

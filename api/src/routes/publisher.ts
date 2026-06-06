@@ -24,18 +24,25 @@ export default async function publisherRoutes(server: FastifyInstance) {
     const start7d = new Date(now.getTime() - 7 * 86400000)
     const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0)
 
-    const [today, week, month, approved] = await Promise.all([
+    const [today, week, month, approved, approvedCount, totalClicks, clicksMonth] = await Promise.all([
       prisma.conversion.aggregate({ where: { publisherId: id, receivedAt: { gte: startOfDay } }, _sum: { commissionAmount: true }, _count: true }),
       prisma.conversion.aggregate({ where: { publisherId: id, receivedAt: { gte: start7d } }, _sum: { commissionAmount: true }, _count: true }),
       prisma.conversion.aggregate({ where: { publisherId: id, receivedAt: { gte: start30d } }, _sum: { commissionAmount: true }, _count: true }),
       prisma.conversion.aggregate({ where: { publisherId: id, status: 'APPROVED' }, _sum: { commissionAmount: true } }),
+      prisma.conversion.count({ where: { publisherId: id, status: 'APPROVED' } }),
+      prisma.click.count({ where: { publisherId: id } }),
+      prisma.click.count({ where: { publisherId: id, clickedAt: { gte: start30d } } }),
     ])
 
+    const totalCommission = approved._sum.commissionAmount ?? 0
     return {
       today: { conversions: today._count, earned: today._sum.commissionAmount ?? 0 },
       week: { conversions: week._count, earned: week._sum.commissionAmount ?? 0 },
-      month: { conversions: month._count, earned: month._sum.commissionAmount ?? 0 },
-      totalApproved: approved._sum.commissionAmount ?? 0,
+      month: { conversions: month._count, earned: month._sum.commissionAmount ?? 0, clicks: clicksMonth },
+      totalApproved: totalCommission,
+      totalClicks,
+      cvr: totalClicks > 0 ? parseFloat(((approvedCount / totalClicks) * 100).toFixed(2)) : 0,
+      epc: totalClicks > 0 ? parseFloat((totalCommission / totalClicks).toFixed(4)) : 0,
     }
   })
 

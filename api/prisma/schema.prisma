@@ -17,6 +17,7 @@ model User {
   postbackUrl String?
   createdAt   DateTime     @default(now())
   conversions Conversion[]
+  clicks      Click[]
 }
 
 enum Role {
@@ -43,6 +44,7 @@ model Offer {
   destinationUrl  String?
   createdAt       DateTime     @default(now())
   conversions     Conversion[]
+  clicks          Click[]
 }
 
 enum MmpSource {
@@ -90,4 +92,18 @@ enum ConvStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+model Click {
+  id          String   @id @default(cuid())
+  offerId     String
+  offer       Offer    @relation(fields: [offerId], references: [id])
+  publisherId String?
+  publisher   User?    @relation(fields: [publisherId], references: [id])
+  ip          String?
+  userAgent   String?
+  clickedAt   DateTime @default(now())
+
+  @@index([offerId, clickedAt(sort: Desc)])
+  @@index([publisherId, clickedAt(sort: Desc)])
 }
