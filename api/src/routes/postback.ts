@@ -30,7 +30,9 @@ interface CityAdsQuery {
   xid?: string
   offer_id?: string
   action_type?: string
-  order_total?: string
+  payout?: string           // commission CityAds pays Magic — use this for revenue
+  payout_currency?: string
+  order_total?: string      // GMV/sale amount — stored in rawPayload only
   order_total_currency?: string
   sa?: string
   status?: string
@@ -155,8 +157,9 @@ export default async function postbackRoutes(server: FastifyInstance) {
     const appId = query.offer_id
     const publisherId = query.sa
     const eventType = query.action_type || 'conversion'
-    const revenue = parseFloat(query.order_total || '0') || 0
-    const currency = query.order_total_currency || 'USD'
+    // payout = commission CityAds pays Magic for this conversion (not the order/GMV total)
+    const revenue = parseFloat(query.payout || '0') || 0
+    const currency = query.payout_currency || query.order_total_currency || 'USD'
     const eventAt = query.conversion_time ? new Date(query.conversion_time) : new Date()
 
     if (!sourceRefId) return { ok: true, reason: 'missing xid' }

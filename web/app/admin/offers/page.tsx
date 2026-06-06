@@ -360,6 +360,10 @@ export default function OffersPage() {
                     placeholder="https://cityads.com/offer/..."
                   />
                   <p className="text-xs text-gray-400 mt-1">CityAds offer landing page — publishers will be redirected here</p>
+                  <p className="text-xs text-orange-600 mt-2 font-medium">Postback URL mẫu đăng ký với CityAds:</p>
+                  <code className="block text-[10px] text-gray-500 mt-1 break-all leading-relaxed">
+                    {`{API_URL}/postback/cityads?xid={xid}&offer_id={offer_id}&payout={payout}&payout_currency={currency}&sa={sa}&status={status}&action_type={action_type}&conversion_time={conversion_time}`}
+                  </code>
                 </div>
               )}
               <div className="flex gap-3 pt-2">
