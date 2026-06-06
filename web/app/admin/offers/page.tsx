@@ -32,7 +32,7 @@ interface OfferSummary {
   publisherCount: number
 }
 
-const empty = { name: '', appName: '', appId: '', mmpSource: 'APPSFLYER', commissionType: 'FLAT_CPA', commissionValue: '', currency: 'USD', destinationUrl: '' }
+const empty = { name: '', appName: '', appId: '', mmpSource: 'APPSFLYER', commissionType: 'FLAT_CPA', commissionValue: '', currency: 'USD', destinationUrl: '', pubCommissionDisplay: '' }
 
 export default function OffersPage() {
   const [tab, setTab] = useState<'manage' | 'performance'>('manage')
@@ -84,6 +84,7 @@ export default function OffersPage() {
       commissionValue: String(offer.commissionValue),
       currency: offer.currency,
       destinationUrl: offer.destinationUrl || '',
+      pubCommissionDisplay: (offer as any).pubCommissionDisplay || '',
     })
     setError('')
     setShowModal(true)
@@ -416,6 +417,21 @@ export default function OffersPage() {
                   </code>
                 </div>
               )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Publisher Commission Display
+                  <span className="ml-1 text-xs font-normal text-gray-400">(shown to publishers)</span>
+                </label>
+                <input
+                  type="text"
+                  value={form.pubCommissionDisplay}
+                  onChange={(e) => setForm({ ...form, pubCommissionDisplay: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="e.g. 8% per order, 15,000₫/đơn, Up to 10%..."
+                />
+                <p className="text-xs text-gray-400 mt-1">Admin-controlled text. Leave blank to hide commission from publishers.</p>
+              </div>
+
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"

@@ -40,9 +40,10 @@ model Offer {
   commissionType  CommType     @default(FLAT_CPA)
   commissionValue Float
   currency        String       @default("USD")
-  status          OfferStatus  @default(ACTIVE)
-  destinationUrl  String?
-  createdAt       DateTime     @default(now())
+  status               OfferStatus  @default(ACTIVE)
+  destinationUrl       String?
+  pubCommissionDisplay String?
+  createdAt            DateTime     @default(now())
   conversions     Conversion[]
   clicks          Click[]
 }

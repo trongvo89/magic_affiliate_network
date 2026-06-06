@@ -19,9 +19,7 @@ interface CityAdsOffer {
   id: string
   name: string
   appName: string
-  commissionType: string
-  commissionValue: number
-  currency: string
+  pubCommissionDisplay: string | null
 }
 
 export default function PublisherOffersPage() {
@@ -134,9 +132,7 @@ export default function PublisherOffersPage() {
                     <div className="text-xs text-gray-400">{o.appName}</div>
                   </td>
                   <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                    {o.commissionType === 'FLAT_CPA'
-                      ? `$${o.commissionValue.toFixed(2)} CPA`
-                      : `${o.commissionValue}% Rev`}
+                    {o.pubCommissionDisplay || <span className="text-gray-400">—</span>}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">

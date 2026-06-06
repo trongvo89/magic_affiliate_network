@@ -133,16 +133,16 @@ export default async function adminRoutes(server: FastifyInstance) {
     return Object.values(summary).sort((a: any, b: any) => b.total - a.total)
   })
 
-  server.post<{ Body: { name: string; appName: string; appId: string; mmpSource: string; commissionType: string; commissionValue: number; currency: string; destinationUrl?: string } }>(
+  server.post<{ Body: { name: string; appName: string; appId: string; mmpSource: string; commissionType: string; commissionValue: number; currency: string; destinationUrl?: string; pubCommissionDisplay?: string } }>(
     '/offers',
     async (request, reply) => {
-      const { name, appName, appId, mmpSource, commissionType, commissionValue, currency, destinationUrl } = request.body
+      const { name, appName, appId, mmpSource, commissionType, commissionValue, currency, destinationUrl, pubCommissionDisplay } = request.body
       if (!name || !appName || !appId || !mmpSource || !commissionType || commissionValue == null) {
         return reply.code(400).send({ error: 'Missing fields' })
       }
       try {
         const offer = await prisma.offer.create({
-          data: { name, appName, appId, mmpSource: mmpSource as any, commissionType: commissionType as any, commissionValue, currency: currency || 'USD', destinationUrl: destinationUrl || null },
+          data: { name, appName, appId, mmpSource: mmpSource as any, commissionType: commissionType as any, commissionValue, currency: currency || 'USD', destinationUrl: destinationUrl || null, pubCommissionDisplay: pubCommissionDisplay || null },
         })
         return reply.code(201).send(offer)
       } catch (err: any) {
@@ -154,11 +154,11 @@ export default async function adminRoutes(server: FastifyInstance) {
     }
   )
 
-  server.put<{ Params: { id: string }; Body: Partial<{ name: string; appName: string; appId: string; mmpSource: string; commissionType: string; commissionValue: number; currency: string; status: string; destinationUrl: string | null }> }>(
+  server.put<{ Params: { id: string }; Body: Partial<{ name: string; appName: string; appId: string; mmpSource: string; commissionType: string; commissionValue: number; currency: string; status: string; destinationUrl: string | null; pubCommissionDisplay: string | null }> }>(
     '/offers/:id',
     async (request, reply) => {
       const { id } = request.params
-      const { name, appName, appId, mmpSource, commissionType, commissionValue, currency, status, destinationUrl } = request.body
+      const { name, appName, appId, mmpSource, commissionType, commissionValue, currency, status, destinationUrl, pubCommissionDisplay } = request.body
       const data: any = {}
       if (name !== undefined) data.name = name
       if (appName !== undefined) data.appName = appName
@@ -169,6 +169,7 @@ export default async function adminRoutes(server: FastifyInstance) {
       if (currency !== undefined) data.currency = currency
       if (status !== undefined) data.status = status
       if (destinationUrl !== undefined) data.destinationUrl = destinationUrl || null
+      if (pubCommissionDisplay !== undefined) data.pubCommissionDisplay = pubCommissionDisplay || null
       try {
         return await prisma.offer.update({ where: { id }, data })
       } catch (err: any) {
