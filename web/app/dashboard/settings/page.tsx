@@ -50,15 +50,13 @@ export default function SettingsPage() {
     setTesting(true)
     setTestResult(null)
     try {
-      // Build a test URL with fake macro values
-      let url = form.postbackUrl
+      const url = form.postbackUrl
         .replace(/{click_id}/g, 'TEST_CLICK')
         .replace(/{payout}/g, '1.00')
         .replace(/{event}/g, 'test')
         .replace(/{order_id}/g, 'TEST_ORDER')
         .replace(/{status}/g, 'approved')
-      // Proxy via our own API to avoid CORS
-      await api.get(`/publisher/profile`) // just test connectivity
+      await api.get('/publisher/profile')
       setTestResult({ ok: true, msg: `Test postback would fire to: ${url.substring(0, 80)}...` })
     } catch {
       setTestResult({ ok: false, msg: 'Could not validate URL' })
@@ -90,7 +88,7 @@ export default function SettingsPage() {
                 <button
                   type="button"
                   onClick={() => navigator.clipboard.writeText(profile.id)}
-                  className="text-sm text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap"
+                  className="text-sm text-orange-500 hover:text-orange-700 font-medium whitespace-nowrap"
                 >Copy</button>
               </div>
               <p className="text-xs text-gray-400 mt-1">Gửi ID này cho Admin để được gắn vào postback URL của advertiser.</p>
@@ -101,7 +99,7 @@ export default function SettingsPage() {
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
             </div>
             <div>
@@ -116,9 +114,9 @@ export default function SettingsPage() {
           <h2 className="font-semibold text-gray-900 mb-1">Postback URL</h2>
           <p className="text-xs text-gray-500 mb-4">Your tracker URL to receive conversion notifications.</p>
 
-          <div className="bg-blue-50 rounded-lg p-3 mb-4">
-            <p className="text-xs font-medium text-blue-800 mb-1">Available macros:</p>
-            <code className="text-xs text-blue-700 font-mono">
+          <div className="bg-orange-50 rounded-lg p-3 mb-4 border border-orange-100">
+            <p className="text-xs font-medium text-orange-800 mb-1">Available macros:</p>
+            <code className="text-xs text-orange-700 font-mono">
               {'{payout}'} &nbsp; {'{event}'} &nbsp; {'{order_id}'} &nbsp; {'{status}'} &nbsp; {'{click_id}'}
             </code>
           </div>
@@ -128,14 +126,14 @@ export default function SettingsPage() {
               value={form.postbackUrl}
               onChange={(e) => setForm({ ...form, postbackUrl: e.target.value })}
               rows={3}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500"
               placeholder="https://tracker.example.com/pb?payout={payout}&event={event}&order={order_id}"
             />
             <button
               type="button"
               onClick={handleTestPostback}
               disabled={testing || !form.postbackUrl}
-              className="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50 font-medium"
+              className="text-sm text-orange-500 hover:text-orange-700 disabled:opacity-50 font-medium"
             >
               {testing ? 'Testing...' : 'Test Postback URL'}
             </button>
@@ -156,7 +154,7 @@ export default function SettingsPage() {
                 type="password"
                 value={form.currentPassword}
                 onChange={(e) => setForm({ ...form, currentPassword: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                 placeholder="••••••••"
               />
             </div>
@@ -166,7 +164,7 @@ export default function SettingsPage() {
                 type="password"
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                 placeholder="••••••••"
               />
             </div>
@@ -176,7 +174,7 @@ export default function SettingsPage() {
         <button
           type="submit"
           disabled={saving}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm transition-colors"
+          className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg text-sm transition-colors"
         >
           {saving ? 'Saving...' : 'Save Changes'}
         </button>

@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Magic Affiliate Network',
-  description: 'Mobile App Affiliate Network',
+  title: 'Magic Media Affiliate',
+  description: 'Performance Marketing Network',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -121,7 +121,7 @@ export default function OffersPage() {
         {tab === 'manage' && (
           <button
             onClick={() => setShowModal(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
           >
             + New Offer
           </button>
@@ -172,7 +172,7 @@ export default function OffersPage() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleStatus(o)}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                      className="text-xs text-orange-500 hover:text-orange-700 font-medium"
                     >
                       {o.status === 'ACTIVE' ? 'Pause' : 'Activate'}
                     </button>
@@ -267,7 +267,7 @@ export default function OffersPage() {
                     required
                     value={(form as any)[f.key]}
                     onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                     placeholder={f.placeholder}
                   />
                 </div>
@@ -278,7 +278,7 @@ export default function OffersPage() {
                   <select
                     value={form.mmpSource}
                     onChange={(e) => setForm({ ...form, mmpSource: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                   >
                     <option value="APPSFLYER">AppsFlyer</option>
                     <option value="ADJUST">Adjust</option>
@@ -290,7 +290,7 @@ export default function OffersPage() {
                   <select
                     value={form.commissionType}
                     onChange={(e) => setForm({ ...form, commissionType: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                   >
                     <option value="FLAT_CPA">Flat CPA</option>
                     <option value="PERCENT_REVENUE">% Revenue</option>
@@ -307,7 +307,7 @@ export default function OffersPage() {
                     required
                     value={form.commissionValue}
                     onChange={(e) => setForm({ ...form, commissionValue: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                     placeholder={form.commissionType === 'FLAT_CPA' ? '2.00' : '8'}
                   />
                 </div>
@@ -316,7 +316,7 @@ export default function OffersPage() {
                   <select
                     value={form.currency}
                     onChange={(e) => setForm({ ...form, currency: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                   >
                     <option value="USD">USD</option>
                     <option value="EUR">EUR</option>
@@ -331,7 +331,7 @@ export default function OffersPage() {
                     type="url"
                     value={form.destinationUrl}
                     onChange={(e) => setForm({ ...form, destinationUrl: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                     placeholder="https://cityads.com/offer/..."
                   />
                   <p className="text-xs text-gray-400 mt-1">CityAds offer landing page — publishers will be redirected here</p>
