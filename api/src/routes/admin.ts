@@ -74,6 +74,55 @@ export default async function adminRoutes(server: FastifyInstance) {
     }
   )
 
+  // Export conversions as CSV
+  server.get<{ Querystring: { offerId?: string; publisherId?: string; status?: string; from?: string; to?: string } }>(
+    '/conversions/export',
+    async (request, reply) => {
+      const { offerId, publisherId, status, from, to } = request.query
+      const where: any = {}
+      if (offerId) where.offerId = offerId
+      if (publisherId) where.publisherId = publisherId
+      if (status) where.status = status
+      if (from || to) {
+        where.eventAt = {}
+        const gteDate = parseDate(from); if (gteDate) where.eventAt.gte = gteDate
+        const lteDate = parseDate(to); if (lteDate) { lteDate.setHours(23, 59, 59, 999); where.eventAt.lte = lteDate }
+      }
+
+      const convs = await prisma.conversion.findMany({
+        where,
+        orderBy: [{ offerId: 'asc' }, { status: 'asc' }, { eventAt: 'desc' }],
+        include: { offer: { select: { name: true } }, publisher: { select: { name: true, email: true } } },
+      })
+
+      const esc = (v: any): string => {
+        const s = String(v ?? '')
+        return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s
+      }
+      const header = 'date,offer_id,offer_name,mmp_source,publisher_id,publisher_name,publisher_email,event_type,revenue,commission,currency,status,source_ref_id'
+      const rows = convs.map(c => [
+        new Date(c.eventAt).toISOString(),
+        c.offerId,
+        c.offer?.name ?? '',
+        c.sourceType,
+        c.publisherId ?? '',
+        c.publisher?.name ?? '',
+        c.publisher?.email ?? '',
+        c.eventType,
+        c.revenue,
+        c.commissionAmount,
+        c.currency,
+        c.status,
+        c.sourceRefId,
+      ].map(esc).join(','))
+
+      const csv = [header, ...rows].join('\n')
+      reply.header('Content-Type', 'text/csv')
+      reply.header('Content-Disposition', `attachment; filename="conversions_${new Date().toISOString().slice(0, 10)}.csv"`)
+      return reply.send(csv)
+    }
+  )
+
   // Offers
   server.get('/offers', async () => {
     const offers = await prisma.offer.findMany({
@@ -422,26 +471,40 @@ export default async function adminRoutes(server: FastifyInstance) {
   )
 
   // Manual conversion bulk upload (CSV rows as JSON)
-  server.post<{ Body: { rows: Array<{ publisherId: string; offerId: string; eventType: string; revenue?: number; eventAt: string; sourceRefId?: string }> } }>(
+  server.post<{ Body: { rows: Array<{ publisherId: string; offerId: string; eventType: string; revenue?: number; eventAt: string; sourceRefId?: string; status?: string }>; validateFrom?: string; validateTo?: string } }>(
     '/conversions/bulk',
     async (request, reply) => {
-      const { rows } = request.body
+      const { rows, validateFrom, validateTo } = request.body
       if (!Array.isArray(rows) || rows.length === 0) {
         return reply.code(400).send({ error: 'No rows provided' })
       }
       if (rows.length > 500) {
         return reply.code(400).send({ error: 'Bulk limit is 500 rows per request' })
       }
+      const fromDate = parseDate(validateFrom)
+      const toDateBound = parseDate(validateTo)
+      if (toDateBound) toDateBound.setHours(23, 59, 59, 999)
+
+      const validStatuses = ['PENDING', 'APPROVED', 'REJECTED']
       const results: { success: number; failed: number; errors: string[] } = { success: 0, failed: 0, errors: [] }
 
       for (const row of rows) {
         try {
+          const eventDate = new Date(row.eventAt)
+          if (isNaN(eventDate.getTime())) throw new Error('Invalid event_at date')
+          if (fromDate && eventDate < fromDate) throw new Error(`event_at ${row.eventAt} is before validateFrom`)
+          if (toDateBound && eventDate > toDateBound) throw new Error(`event_at ${row.eventAt} is after validateTo`)
+
           const offer = await prisma.offer.findUnique({ where: { id: row.offerId } })
           if (!offer) throw new Error(`Offer "${row.offerId}" not found`)
           const revenue = row.revenue || 0
           const commissionAmount = offer.commissionType === 'FLAT_CPA'
             ? offer.commissionValue
             : parseFloat((revenue * offer.commissionValue / 100).toFixed(2))
+
+          const rowStatus = row.status && validStatuses.includes(row.status.toUpperCase())
+            ? row.status.toUpperCase()
+            : 'PENDING'
 
           await prisma.conversion.create({
             data: {
@@ -453,9 +516,9 @@ export default async function adminRoutes(server: FastifyInstance) {
               revenue,
               commissionAmount,
               currency: offer.currency,
-              status: 'PENDING',
+              status: rowStatus as any,
               rawPayload: { manual: true, bulk: true },
-              eventAt: new Date(row.eventAt),
+              eventAt: eventDate,
             },
           })
           results.success++

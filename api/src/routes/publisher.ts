@@ -76,6 +76,50 @@ export default async function publisherRoutes(server: FastifyInstance) {
     return { conversions, total, page: parseInt(page), limit: parseInt(limit) }
   })
 
+  server.get<{ Querystring: { offerId?: string; status?: string; from?: string; to?: string } }>(
+    '/conversions/export',
+    async (request, reply) => {
+      const { id } = request.user as any
+      const { offerId, status, from, to } = request.query
+      const where: any = { publisherId: id }
+      if (offerId) where.offerId = offerId
+      if (status) where.status = status
+      if (from || to) {
+        where.eventAt = {}
+        const gteDate = parseDate(from); if (gteDate) where.eventAt.gte = gteDate
+        const lteDate = parseDate(to); if (lteDate) { lteDate.setHours(23, 59, 59, 999); where.eventAt.lte = lteDate }
+      }
+
+      const convs = await prisma.conversion.findMany({
+        where,
+        orderBy: [{ offerId: 'asc' }, { status: 'asc' }, { eventAt: 'desc' }],
+        include: { offer: { select: { name: true } } },
+      })
+
+      const esc = (v: any): string => {
+        const s = String(v ?? '')
+        return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s
+      }
+      const header = 'date,offer_id,offer_name,event_type,revenue,commission,currency,status,source_ref_id'
+      const rows = convs.map(c => [
+        new Date(c.eventAt).toISOString(),
+        c.offerId,
+        c.offer?.name ?? '',
+        c.eventType,
+        c.revenue,
+        c.commissionAmount,
+        c.currency,
+        c.status,
+        c.sourceRefId,
+      ].map(esc).join(','))
+
+      const csv = [header, ...rows].join('\n')
+      reply.header('Content-Type', 'text/csv')
+      reply.header('Content-Disposition', `attachment; filename="my_conversions_${new Date().toISOString().slice(0, 10)}.csv"`)
+      return reply.send(csv)
+    }
+  )
+
   server.get<{ Querystring: { from?: string; to?: string } }>('/offers-summary', async (request) => {
     const { id } = request.user as any
     const { from, to } = request.query

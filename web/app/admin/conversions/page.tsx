@@ -33,6 +33,7 @@ export default function ConversionsPage() {
   const [filters, setFilters] = useState({ offerId: '', publisherId: '', status: '', from: '', to: '' })
   const [selected, setSelected] = useState<Conversion | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   // Single manual form
   const [showManual, setShowManual] = useState(false)
@@ -48,6 +49,8 @@ export default function ConversionsPage() {
   const [csvError, setCsvError] = useState('')
   const [csvUploading, setCsvUploading] = useState(false)
   const [csvResult, setCsvResult] = useState<{ success: number; failed: number; errors: string[] } | null>(null)
+  const [csvValidateFrom, setCsvValidateFrom] = useState('')
+  const [csvValidateTo, setCsvValidateTo] = useState('')
 
   const limit = 20
 
@@ -81,6 +84,29 @@ export default function ConversionsPage() {
     }
   }
 
+  async function exportCsv() {
+    setExporting(true)
+    try {
+      const params = new URLSearchParams()
+      if (filters.offerId) params.set('offerId', filters.offerId)
+      if (filters.publisherId) params.set('publisherId', filters.publisherId)
+      if (filters.status) params.set('status', filters.status)
+      if (filters.from) params.set('from', filters.from)
+      if (filters.to) params.set('to', filters.to)
+      const { data } = await api.get(`/admin/conversions/export?${params}`, { responseType: 'blob' })
+      const url = URL.createObjectURL(new Blob([data], { type: 'text/csv' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `conversions_${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Export failed')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   async function submitManual(e: React.FormEvent) {
     e.preventDefault()
     setManualSaving(true)
@@ -107,29 +133,70 @@ export default function ConversionsPage() {
 
   function resetCsv() {
     setCsvText(''); setCsvParsed([]); setCsvError(''); setCsvResult(null)
+    setCsvValidateFrom(''); setCsvValidateTo('')
   }
 
-  function parseCsvCreate(text: string) {
+  function parseCsvCreate(text: string, valFrom = csvValidateFrom, valTo = csvValidateTo) {
     setCsvError(''); setCsvResult(null)
     const lines = text.trim().split('\n').filter(Boolean)
     if (lines.length < 2) { setCsvError('Cần ít nhất 1 dòng dữ liệu sau header'); setCsvParsed([]); return }
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
-    const required = ['publisher_id', 'offer_id', 'event_type', 'event_at']
-    const missing = required.filter(r => !headers.includes(r))
-    if (missing.length) { setCsvError(`Thiếu cột: ${missing.join(', ')}`); setCsvParsed([]); return }
-    const rows = lines.slice(1).map((line) => {
+    const hasPublisher = headers.includes('publisher_id') || headers.includes('publisher_email')
+    const hasOffer = headers.includes('offer_id') || headers.includes('offer_name')
+    if (!hasPublisher) { setCsvError('Thiếu cột: publisher_id hoặc publisher_email'); setCsvParsed([]); return }
+    if (!hasOffer) { setCsvError('Thiếu cột: offer_id hoặc offer_name'); setCsvParsed([]); return }
+    const missingCols = ['event_type', 'event_at'].filter(r => !headers.includes(r))
+    if (missingCols.length) { setCsvError(`Thiếu cột: ${missingCols.join(', ')}`); setCsvParsed([]); return }
+
+    const pubEmailMap: Record<string, string> = {}
+    for (const p of publishers) pubEmailMap[p.email.toLowerCase()] = p.id
+    const offerNameMap: Record<string, string> = {}
+    for (const o of offers) offerNameMap[o.name.toLowerCase()] = o.id
+
+    const validStatuses = ['PENDING', 'APPROVED', 'REJECTED']
+    const fromDate = valFrom ? new Date(valFrom) : null
+    const toDate = valTo ? new Date(valTo + 'T23:59:59') : null
+
+    const errors: string[] = []
+    const rows: any[] = []
+
+    lines.slice(1).forEach((line, lineIdx) => {
       const vals = line.split(',').map(v => v.trim())
       const row: any = {}
       headers.forEach((h, idx) => { row[h] = vals[idx] || '' })
-      return {
-        publisherId: row['publisher_id'],
-        offerId: row['offer_id'],
+
+      let publisherId = row['publisher_id'] || ''
+      if (!publisherId && row['publisher_email']) {
+        publisherId = pubEmailMap[row['publisher_email'].toLowerCase()] || ''
+        if (!publisherId) { errors.push(`Row ${lineIdx + 2}: publisher_email "${row['publisher_email']}" not found`); return }
+      }
+      if (!publisherId) { errors.push(`Row ${lineIdx + 2}: missing publisher_id or publisher_email`); return }
+
+      let offerId = row['offer_id'] || ''
+      if (!offerId && row['offer_name']) {
+        offerId = offerNameMap[row['offer_name'].toLowerCase()] || ''
+        if (!offerId) { errors.push(`Row ${lineIdx + 2}: offer_name "${row['offer_name']}" not found`); return }
+      }
+      if (!offerId) { errors.push(`Row ${lineIdx + 2}: missing offer_id or offer_name`); return }
+
+      const eventDate = new Date(row['event_at'])
+      if (isNaN(eventDate.getTime())) { errors.push(`Row ${lineIdx + 2}: invalid event_at date`); return }
+      if (fromDate && eventDate < fromDate) { errors.push(`Row ${lineIdx + 2}: event_at ngoài khoảng (trước ${valFrom})`); return }
+      if (toDate && eventDate > toDate) { errors.push(`Row ${lineIdx + 2}: event_at ngoài khoảng (sau ${valTo})`); return }
+
+      const status = row['status']?.toUpperCase()
+      rows.push({
+        publisherId,
+        offerId,
         eventType: row['event_type'],
         revenue: row['revenue'] ? parseFloat(row['revenue']) : 0,
         eventAt: row['event_at'],
         sourceRefId: row['source_ref_id'] || undefined,
-      }
+        status: validStatuses.includes(status) ? status : 'PENDING',
+      })
     })
+
+    if (errors.length) { setCsvError(errors.join('\n')); setCsvParsed([]); return }
     setCsvParsed(rows)
   }
 
@@ -157,13 +224,28 @@ export default function ConversionsPage() {
     setCsvParsed(rows)
   }
 
+  function handleCsvFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string
+      setCsvText(text)
+      if (csvTab === 'create') parseCsvCreate(text)
+      else parseCsvUpdate(text)
+    }
+    reader.readAsText(file)
+  }
+
   async function submitCsv() {
     if (!csvParsed.length) return
     setCsvUploading(true)
     setCsvResult(null)
     try {
       const endpoint = csvTab === 'create' ? '/admin/conversions/bulk' : '/admin/conversions/bulk-status'
-      const body = csvTab === 'create' ? { rows: csvParsed } : { rows: csvParsed }
+      const body: any = { rows: csvParsed }
+      if (csvTab === 'create' && csvValidateFrom) body.validateFrom = csvValidateFrom
+      if (csvTab === 'create' && csvValidateTo) body.validateTo = csvValidateTo
       const { data } = await api.post(endpoint, body)
       setCsvResult(data)
       if (data.success > 0) load()
@@ -177,8 +259,8 @@ export default function ConversionsPage() {
   function downloadTemplate() {
     let content: string
     if (csvTab === 'create') {
-      const header = 'publisher_id,offer_id,event_type,revenue,event_at,source_ref_id'
-      const example = `${publishers[0]?.id || 'PUBLISHER_ID'},${offers[0]?.id || 'OFFER_ID'},purchase,25.50,${new Date().toISOString().slice(0, 10)},ref-001`
+      const header = 'publisher_id,publisher_email,offer_id,offer_name,event_type,revenue,event_at,source_ref_id,status'
+      const example = `${publishers[0]?.id || 'PUBLISHER_ID'},,${offers[0]?.id || 'OFFER_ID'},,purchase,25.50,${new Date().toISOString().slice(0, 10)},ref-001,APPROVED`
       content = header + '\n' + example
     } else {
       const header = 'source_ref_id,status'
@@ -204,7 +286,7 @@ export default function ConversionsPage() {
   }
 
   const mmpBadge = (s: string) => (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${s === 'APPSFLYER' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>{s}</span>
+    <span className={`px-2 py-0.5 rounded text-xs font-medium ${s === 'APPSFLYER' ? 'bg-blue-100 text-blue-700' : s === 'ADJUST' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'}`}>{s}</span>
   )
 
   const pages = Math.ceil(total / limit)
@@ -214,6 +296,13 @@ export default function ConversionsPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-gray-900">Conversions ({total})</h1>
         <div className="flex gap-2">
+          <button onClick={exportCsv} disabled={exporting}
+            className="flex items-center gap-1.5 text-sm border border-gray-300 hover:bg-gray-50 disabled:opacity-50 text-gray-600 px-3 py-1.5 rounded-lg font-medium">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            {exporting ? 'Exporting...' : 'Export CSV'}
+          </button>
           <button onClick={() => { setShowCsv(true); resetCsv(); setCsvTab('create') }}
             className="text-sm border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded-lg font-medium">
             Upload CSV
@@ -274,25 +363,16 @@ export default function ConversionsPage() {
                   <td className="px-4 py-2.5">
                     <div className="flex gap-1">
                       {c.status !== 'APPROVED' && (
-                        <button
-                          onClick={() => updateStatus(c.id, 'APPROVED')}
-                          disabled={updatingId === c.id}
-                          className="text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-2 py-1 rounded font-medium"
-                        >✓</button>
+                        <button onClick={() => updateStatus(c.id, 'APPROVED')} disabled={updatingId === c.id}
+                          className="text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-2 py-1 rounded font-medium">✓</button>
                       )}
                       {c.status !== 'PENDING' && (
-                        <button
-                          onClick={() => updateStatus(c.id, 'PENDING')}
-                          disabled={updatingId === c.id}
-                          className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-2 py-1 rounded font-medium"
-                        >~</button>
+                        <button onClick={() => updateStatus(c.id, 'PENDING')} disabled={updatingId === c.id}
+                          className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-2 py-1 rounded font-medium">~</button>
                       )}
                       {c.status !== 'REJECTED' && (
-                        <button
-                          onClick={() => updateStatus(c.id, 'REJECTED')}
-                          disabled={updatingId === c.id}
-                          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded font-medium"
-                        >✕</button>
+                        <button onClick={() => updateStatus(c.id, 'REJECTED')} disabled={updatingId === c.id}
+                          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded font-medium">✕</button>
                       )}
                     </div>
                   </td>
@@ -429,7 +509,7 @@ export default function ConversionsPage() {
       {/* CSV Upload modal */}
       {showCsv && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCsv(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-2xl p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-gray-900">Upload CSV</h2>
               <button onClick={() => setShowCsv(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
@@ -441,7 +521,7 @@ export default function ConversionsPage() {
                 onClick={() => { setCsvTab('create'); resetCsv() }}
                 className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${csvTab === 'create' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
               >
-                Tạo mới (Pending)
+                Tạo conversion mới
               </button>
               <button
                 onClick={() => { setCsvTab('update'); resetCsv() }}
@@ -454,10 +534,14 @@ export default function ConversionsPage() {
             {csvTab === 'create' ? (
               <div className="bg-gray-50 rounded-lg p-3 mb-3 text-xs text-gray-600">
                 <p className="font-medium mb-1">Cột bắt buộc:</p>
-                <code className="font-mono">publisher_id, offer_id, event_type, event_at</code>
+                <code className="font-mono">event_type, event_at</code>
+                <p className="font-medium mt-2 mb-1">Publisher (một trong hai):</p>
+                <code className="font-mono">publisher_id</code> <span className="text-gray-400">hoặc</span> <code className="font-mono">publisher_email</code>
+                <p className="font-medium mt-2 mb-1">Offer (một trong hai):</p>
+                <code className="font-mono">offer_id</code> <span className="text-gray-400">hoặc</span> <code className="font-mono">offer_name</code>
                 <p className="font-medium mt-2 mb-1">Cột tùy chọn:</p>
-                <code className="font-mono">revenue, source_ref_id</code>
-                <p className="mt-1 text-gray-400">Tất cả sẽ được tạo với trạng thái PENDING</p>
+                <code className="font-mono">revenue, source_ref_id, status</code>
+                <p className="mt-1 text-gray-400">status: PENDING (mặc định) · APPROVED · REJECTED</p>
               </div>
             ) : (
               <div className="bg-blue-50 rounded-lg p-3 mb-3 text-xs text-blue-700">
@@ -469,28 +553,72 @@ export default function ConversionsPage() {
             )}
 
             <button onClick={downloadTemplate}
-              className="text-sm text-blue-600 hover:text-blue-800 font-medium mb-3 block">
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium mb-4 block">
               Download template CSV
             </button>
+
+            {/* Date range validation (create only) */}
+            {csvTab === 'create' && (
+              <div className="mb-4">
+                <p className="text-xs font-medium text-gray-600 mb-2">Kiểm tra ngày (tùy chọn) — từ chối dòng ngoài khoảng:</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Từ ngày</label>
+                    <input type="date" value={csvValidateFrom}
+                      onChange={e => {
+                        const v = e.target.value
+                        setCsvValidateFrom(v)
+                        if (csvText) parseCsvCreate(csvText, v, csvValidateTo)
+                      }}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Đến ngày</label>
+                    <input type="date" value={csvValidateTo}
+                      onChange={e => {
+                        const v = e.target.value
+                        setCsvValidateTo(v)
+                        if (csvText) parseCsvCreate(csvText, csvValidateFrom, v)
+                      }}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* File upload */}
+            <div className="mb-3">
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Chọn file CSV:</label>
+              <input type="file" accept=".csv,text/csv" onChange={handleCsvFile}
+                className="text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-gray-300 file:text-sm file:font-medium file:bg-white hover:file:bg-gray-50 cursor-pointer w-full" />
+            </div>
+            <p className="text-xs text-gray-400 mb-2">hoặc paste trực tiếp:</p>
 
             <textarea
               value={csvText}
               onChange={(e) => {
                 setCsvText(e.target.value)
                 if (e.target.value) {
-                  csvTab === 'create' ? parseCsvCreate(e.target.value) : parseCsvUpdate(e.target.value)
+                  if (csvTab === 'create') parseCsvCreate(e.target.value)
+                  else parseCsvUpdate(e.target.value)
                 } else {
                   setCsvParsed([]); setCsvError('')
                 }
               }}
-              rows={8}
+              rows={6}
               placeholder={csvTab === 'create'
-                ? 'publisher_id,offer_id,event_type,revenue,event_at\nPUB_ID,OFFER_ID,purchase,25.50,2026-05-28'
+                ? 'publisher_email,offer_name,event_type,revenue,event_at,status\njohn@example.com,Shopee VN CPS,purchase,25.50,2026-05-28,APPROVED'
                 : 'source_ref_id,status\nref-001,APPROVED\nref-002,REJECTED'}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
             />
 
-            {csvError && <p className="text-red-600 text-sm mb-3">{csvError}</p>}
+            {csvError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3">
+                {csvError.split('\n').map((line, i) => (
+                  <p key={i} className="text-red-600 text-xs">{line}</p>
+                ))}
+              </div>
+            )}
 
             {csvParsed.length > 0 && !csvError && (
               <p className="text-sm text-gray-600 mb-3">
