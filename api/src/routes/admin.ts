@@ -75,6 +75,64 @@ export default async function adminRoutes(server: FastifyInstance) {
     return offers
   })
 
+  server.get('/offers-summary', async () => {
+    const grouped = await prisma.conversion.groupBy({
+      by: ['offerId', 'status'],
+      _count: { id: true },
+      _sum: { commissionAmount: true, revenue: true },
+    })
+
+    const offerIds = [...new Set(grouped.map(g => g.offerId))]
+
+    const [offers, pubGroups] = await Promise.all([
+      prisma.offer.findMany({
+        where: { id: { in: offerIds } },
+        select: { id: true, name: true, mmpSource: true, commissionType: true, commissionValue: true, currency: true, status: true },
+      }),
+      prisma.conversion.groupBy({
+        by: ['offerId', 'publisherId'],
+        where: { offerId: { in: offerIds }, publisherId: { not: null } },
+        _count: { id: true },
+      }),
+    ])
+
+    const offerMap = Object.fromEntries(offers.map(o => [o.id, o]))
+    const pubCountMap: Record<string, number> = {}
+    for (const row of pubGroups) {
+      pubCountMap[row.offerId] = (pubCountMap[row.offerId] ?? 0) + 1
+    }
+
+    const summary: Record<string, any> = {}
+    for (const row of grouped) {
+      if (!summary[row.offerId]) {
+        const o = offerMap[row.offerId]
+        summary[row.offerId] = {
+          offerId: row.offerId,
+          offerName: o?.name ?? 'Unknown',
+          mmpSource: o?.mmpSource ?? '',
+          commissionType: o?.commissionType ?? '',
+          currency: o?.currency ?? 'USD',
+          offerStatus: o?.status ?? '',
+          total: 0, approved: 0, pending: 0, rejected: 0,
+          commissionPaid: 0,
+          totalRevenue: 0,
+          publisherCount: pubCountMap[row.offerId] ?? 0,
+        }
+      }
+      const s = summary[row.offerId]
+      s.total += row._count.id
+      if (row.status === 'APPROVED') {
+        s.approved = row._count.id
+        s.commissionPaid = parseFloat((row._sum.commissionAmount ?? 0).toFixed(2))
+        s.totalRevenue = parseFloat((row._sum.revenue ?? 0).toFixed(2))
+      }
+      if (row.status === 'PENDING') s.pending = row._count.id
+      if (row.status === 'REJECTED') s.rejected = row._count.id
+    }
+
+    return Object.values(summary).sort((a: any, b: any) => b.total - a.total)
+  })
+
   server.post<{ Body: { name: string; appName: string; appId: string; mmpSource: string; commissionType: string; commissionValue: number; currency: string } }>(
     '/offers',
     async (request, reply) => {

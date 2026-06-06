@@ -58,6 +58,51 @@ export default async function publisherRoutes(server: FastifyInstance) {
     return { conversions, total, page: parseInt(page), limit: parseInt(limit) }
   })
 
+  server.get('/offers-summary', async (request) => {
+    const { id } = request.user as any
+
+    const grouped = await prisma.conversion.groupBy({
+      by: ['offerId', 'status'],
+      where: { publisherId: id },
+      _count: { id: true },
+      _sum: { commissionAmount: true, revenue: true },
+    })
+
+    const offerIds = [...new Set(grouped.map(g => g.offerId))]
+    const offers = await prisma.offer.findMany({
+      where: { id: { in: offerIds } },
+      select: { id: true, name: true, mmpSource: true, currency: true },
+    })
+    const offerMap = Object.fromEntries(offers.map(o => [o.id, o]))
+
+    const summary: Record<string, any> = {}
+    for (const row of grouped) {
+      if (!summary[row.offerId]) {
+        const o = offerMap[row.offerId]
+        summary[row.offerId] = {
+          offerId: row.offerId,
+          offerName: o?.name ?? 'Unknown',
+          mmpSource: o?.mmpSource ?? '',
+          currency: o?.currency ?? 'USD',
+          total: 0, approved: 0, pending: 0, rejected: 0,
+          commissionEarned: 0,
+          totalRevenue: 0,
+        }
+      }
+      const s = summary[row.offerId]
+      s.total += row._count.id
+      if (row.status === 'APPROVED') {
+        s.approved = row._count.id
+        s.commissionEarned = parseFloat((row._sum.commissionAmount ?? 0).toFixed(2))
+        s.totalRevenue = parseFloat((row._sum.revenue ?? 0).toFixed(2))
+      }
+      if (row.status === 'PENDING') s.pending = row._count.id
+      if (row.status === 'REJECTED') s.rejected = row._count.id
+    }
+
+    return Object.values(summary).sort((a: any, b: any) => b.total - a.total)
+  })
+
   server.get('/profile', async (request) => {
     const { id } = request.user as any
     const user = await prisma.user.findUnique({ where: { id }, select: { id: true, email: true, name: true, postbackUrl: true, status: true, createdAt: true } })
