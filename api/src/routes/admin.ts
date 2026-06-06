@@ -154,16 +154,38 @@ export default async function adminRoutes(server: FastifyInstance) {
     }
   )
 
-  server.put<{ Params: { id: string }; Body: Partial<{ name: string; commissionValue: number; status: string }> }>(
+  server.put<{ Params: { id: string }; Body: Partial<{ name: string; appName: string; appId: string; mmpSource: string; commissionType: string; commissionValue: number; currency: string; status: string; destinationUrl: string | null }> }>(
     '/offers/:id',
-    async (request) => {
+    async (request, reply) => {
       const { id } = request.params
-      const { name, commissionValue, status } = request.body
+      const { name, appName, appId, mmpSource, commissionType, commissionValue, currency, status, destinationUrl } = request.body
       const data: any = {}
       if (name !== undefined) data.name = name
+      if (appName !== undefined) data.appName = appName
+      if (appId !== undefined) data.appId = appId
+      if (mmpSource !== undefined) data.mmpSource = mmpSource
+      if (commissionType !== undefined) data.commissionType = commissionType
       if (commissionValue !== undefined) data.commissionValue = commissionValue
+      if (currency !== undefined) data.currency = currency
       if (status !== undefined) data.status = status
-      return prisma.offer.update({ where: { id }, data })
+      if (destinationUrl !== undefined) data.destinationUrl = destinationUrl || null
+      try {
+        return await prisma.offer.update({ where: { id }, data })
+      } catch (err: any) {
+        if (err.code === 'P2002') {
+          return reply.code(400).send({ error: 'An offer with this App ID / CityAds Offer ID already exists' })
+        }
+        throw err
+      }
+    }
+  )
+
+  server.delete<{ Params: { id: string } }>(
+    '/offers/:id',
+    async (request, reply) => {
+      const { id } = request.params
+      await prisma.offer.delete({ where: { id } })
+      return reply.code(204).send()
     }
   )
 

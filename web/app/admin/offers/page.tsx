@@ -12,6 +12,7 @@ interface Offer {
   commissionValue: number
   currency: string
   status: string
+  destinationUrl: string | null
   _count: { conversions: number }
 }
 
@@ -38,6 +39,7 @@ export default function OffersPage() {
   const [offers, setOffers] = useState<Offer[]>([])
   const [summary, setSummary] = useState<OfferSummary[]>([])
   const [showModal, setShowModal] = useState(false)
+  const [editingOffer, setEditingOffer] = useState<Offer | null>(null)
   const [form, setForm] = useState({ ...empty })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -64,20 +66,54 @@ export default function OffersPage() {
     if (tab === 'performance' && summary.length === 0) loadSummary()
   }, [tab])
 
-  async function handleCreate(e: React.FormEvent) {
+  function openCreate() {
+    setEditingOffer(null)
+    setForm({ ...empty })
+    setError('')
+    setShowModal(true)
+  }
+
+  function openEdit(offer: Offer) {
+    setEditingOffer(offer)
+    setForm({
+      name: offer.name,
+      appName: offer.appName,
+      appId: offer.appId,
+      mmpSource: offer.mmpSource,
+      commissionType: offer.commissionType,
+      commissionValue: String(offer.commissionValue),
+      currency: offer.currency,
+      destinationUrl: offer.destinationUrl || '',
+    })
+    setError('')
+    setShowModal(true)
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     setSaving(true)
     try {
-      await api.post('/admin/offers', { ...form, commissionValue: parseFloat(form.commissionValue), destinationUrl: form.destinationUrl || undefined })
+      const payload = { ...form, commissionValue: parseFloat(form.commissionValue), destinationUrl: form.destinationUrl || undefined }
+      if (editingOffer) {
+        await api.put(`/admin/offers/${editingOffer.id}`, payload)
+      } else {
+        await api.post('/admin/offers', payload)
+      }
       setShowModal(false)
       setForm({ ...empty })
       await loadOffers()
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to create offer')
+      setError(err.response?.data?.error || (editingOffer ? 'Failed to update offer' : 'Failed to create offer'))
     } finally {
       setSaving(false)
     }
+  }
+
+  async function handleDelete(offer: Offer) {
+    if (!confirm(`Delete offer "${offer.name}"? This cannot be undone.`)) return
+    await api.delete(`/admin/offers/${offer.id}`)
+    await loadOffers()
   }
 
   async function toggleStatus(offer: Offer) {
@@ -120,7 +156,7 @@ export default function OffersPage() {
         </div>
         {tab === 'manage' && (
           <button
-            onClick={() => setShowModal(true)}
+            onClick={openCreate}
             className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
           >
             + New Offer
@@ -170,12 +206,26 @@ export default function OffersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => toggleStatus(o)}
-                      className="text-xs text-orange-500 hover:text-orange-700 font-medium"
-                    >
-                      {o.status === 'ACTIVE' ? 'Pause' : 'Activate'}
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => toggleStatus(o)}
+                        className="text-xs text-orange-500 hover:text-orange-700 font-medium"
+                      >
+                        {o.status === 'ACTIVE' ? 'Pause' : 'Activate'}
+                      </button>
+                      <button
+                        onClick={() => openEdit(o)}
+                        className="text-xs text-blue-500 hover:text-blue-700 font-medium"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(o)}
+                        className="text-xs text-red-400 hover:text-red-600 font-medium"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -248,9 +298,9 @@ export default function OffersPage() {
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">New Offer</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-4">{editingOffer ? 'Edit Offer' : 'New Offer'}</h2>
             {error && <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3 mb-4">{error}</div>}
-            <form onSubmit={handleCreate} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
               {[
                 { label: 'Offer Name', key: 'name', placeholder: 'e.g. Shopee App VN' },
                 { label: 'App Name', key: 'appName', placeholder: 'e.g. Shopee' },
@@ -379,7 +429,7 @@ export default function OffersPage() {
                   disabled={saving}
                   className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white py-2 rounded-lg text-sm font-medium transition-colors"
                 >
-                  {saving ? 'Creating...' : 'Create Offer'}
+                  {saving ? 'Saving...' : editingOffer ? 'Save Changes' : 'Create Offer'}
                 </button>
               </div>
             </form>
