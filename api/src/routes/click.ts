@@ -30,7 +30,9 @@ export default async function clickRoutes(server: FastifyInstance) {
               userAgent: request.headers['user-agent'] || null,
             },
           })
-        } catch (_) {}
+        } catch (err) {
+          console.error('[click] failed to log click:', err)
+        }
       })
 
       let dest = offer.destinationUrl

@@ -1,6 +1,12 @@
 import { FastifyInstance, FastifyRequest } from 'fastify'
 import { PrismaClient } from '@prisma/client'
 
+function parseDate(s: string | undefined): Date | null {
+  if (!s) return null
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? null : d
+}
+
 async function requireAdmin(request: FastifyRequest, reply: any) {
   try {
     await request.jwtVerify()
@@ -47,9 +53,11 @@ export default async function adminRoutes(server: FastifyInstance) {
       if (offerId) where.offerId = offerId
       if (publisherId) where.publisherId = publisherId
       if (status) where.status = status
-      if (from || to) where.eventAt = {}
-      if (from) where.eventAt.gte = new Date(from)
-      if (to) where.eventAt.lte = new Date(to)
+      if (from || to) {
+        where.eventAt = {}
+        const gteDate = parseDate(from); if (gteDate) where.eventAt.gte = gteDate
+        const lteDate = parseDate(to); if (lteDate) where.eventAt.lte = lteDate
+      }
 
       const [conversions, total] = await Promise.all([
         prisma.conversion.findMany({
@@ -81,8 +89,11 @@ export default async function adminRoutes(server: FastifyInstance) {
     const buildRange = () => {
       if (!from && !to) return null
       const r: any = {}
-      if (from) r.gte = new Date(from)
-      if (to) { const d = new Date(to); d.setHours(23, 59, 59, 999); r.lte = d }
+      const gteDate = parseDate(from)
+      const lteDate = parseDate(to)
+      if (gteDate) r.gte = gteDate
+      if (lteDate) { lteDate.setHours(23, 59, 59, 999); r.lte = lteDate }
+      if (!r.gte && !r.lte) return null
       return r
     }
     const range = buildRange()
@@ -182,8 +193,11 @@ export default async function adminRoutes(server: FastifyInstance) {
       const buildRange = () => {
         if (!from && !to) return null
         const r: any = {}
-        if (from) r.gte = new Date(from)
-        if (to) { const d = new Date(to); d.setHours(23, 59, 59, 999); r.lte = d }
+        const gteDate = parseDate(from)
+        const lteDate = parseDate(to)
+        if (gteDate) r.gte = gteDate
+        if (lteDate) { lteDate.setHours(23, 59, 59, 999); r.lte = lteDate }
+        if (!r.gte && !r.lte) return null
         return r
       }
       const range = buildRange()
@@ -252,6 +266,21 @@ export default async function adminRoutes(server: FastifyInstance) {
       const { name, appName, appId, mmpSource, commissionType, commissionValue, currency, destinationUrl, pubCommissionDisplay } = request.body
       if (!name || !appName || !appId || !mmpSource || !commissionType || commissionValue == null) {
         return reply.code(400).send({ error: 'Missing fields' })
+      }
+      if (!['APPSFLYER', 'ADJUST', 'CITYADS'].includes(mmpSource)) {
+        return reply.code(400).send({ error: 'Invalid MMP source' })
+      }
+      if (!['FLAT_CPA', 'PERCENT_REVENUE'].includes(commissionType)) {
+        return reply.code(400).send({ error: 'Invalid commission type' })
+      }
+      if (commissionType === 'PERCENT_REVENUE' && (commissionValue <= 0 || commissionValue > 100)) {
+        return reply.code(400).send({ error: 'Revenue share must be between 0 and 100' })
+      }
+      if (commissionType === 'FLAT_CPA' && (commissionValue < 0 || commissionValue > 1_000_000)) {
+        return reply.code(400).send({ error: 'CPA value out of range' })
+      }
+      if (destinationUrl) {
+        try { new URL(destinationUrl) } catch { return reply.code(400).send({ error: 'Invalid destination URL' }) }
       }
       try {
         const offer = await prisma.offer.create({
@@ -364,6 +393,9 @@ export default async function adminRoutes(server: FastifyInstance) {
       if (!Array.isArray(rows) || rows.length === 0) {
         return reply.code(400).send({ error: 'No rows provided' })
       }
+      if (rows.length > 500) {
+        return reply.code(400).send({ error: 'Bulk limit is 500 rows per request' })
+      }
       const results: { success: number; failed: number; errors: string[] } = { success: 0, failed: 0, errors: [] }
 
       for (const row of rows) {
@@ -396,6 +428,9 @@ export default async function adminRoutes(server: FastifyInstance) {
       const { rows } = request.body
       if (!Array.isArray(rows) || rows.length === 0) {
         return reply.code(400).send({ error: 'No rows provided' })
+      }
+      if (rows.length > 500) {
+        return reply.code(400).send({ error: 'Bulk limit is 500 rows per request' })
       }
       const results: { success: number; failed: number; errors: string[] } = { success: 0, failed: 0, errors: [] }
 
@@ -440,10 +475,9 @@ export default async function adminRoutes(server: FastifyInstance) {
     const convWhere: any = { publisherId: { not: null }, status: 'APPROVED' }
     if (from || to) {
       const range: any = {}
-      if (from) range.gte = new Date(from)
-      if (to) { const d = new Date(to); d.setHours(23, 59, 59, 999); range.lte = d }
-      clickWhere.clickedAt = range
-      convWhere.eventAt = range
+      const gteDate = parseDate(from); if (gteDate) range.gte = gteDate
+      const lteDate = parseDate(to); if (lteDate) { lteDate.setHours(23, 59, 59, 999); range.lte = lteDate }
+      if (range.gte || range.lte) { clickWhere.clickedAt = range; convWhere.eventAt = range }
     }
 
     const [clickGroups, approvedGroups] = await Promise.all([
@@ -521,6 +555,14 @@ export default async function adminRoutes(server: FastifyInstance) {
         data,
         select: { id: true, name: true, email: true, role: true, status: true },
       })
+
+      if (role) {
+        console.log(`[audit] admin ${requesterId} changed role of user ${id} to ${role}`)
+      }
+      if (status) {
+        console.log(`[audit] admin ${requesterId} changed status of user ${id} to ${status}`)
+      }
+
       return updated
     }
   )

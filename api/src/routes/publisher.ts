@@ -2,6 +2,12 @@ import { FastifyInstance, FastifyRequest } from 'fastify'
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
+function parseDate(s: string | undefined): Date | null {
+  if (!s) return null
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? null : d
+}
+
 async function requireActivePublisher(request: FastifyRequest, reply: any) {
   try {
     await request.jwtVerify()
@@ -23,8 +29,8 @@ export default async function publisherRoutes(server: FastifyInstance) {
 
     const now = new Date()
     const defaultFrom = new Date(now.getTime() - 30 * 86400000)
-    const fromDate = from ? new Date(from) : defaultFrom
-    const toDate = to ? (() => { const d = new Date(to); d.setHours(23, 59, 59, 999); return d })() : now
+    const fromDate = parseDate(from) ?? defaultFrom
+    const toDate = (() => { const d = parseDate(to) ?? now; d.setHours(23, 59, 59, 999); return d })()
 
     const dateRange = { gte: fromDate, lte: toDate }
 
@@ -77,8 +83,11 @@ export default async function publisherRoutes(server: FastifyInstance) {
     const buildRange = () => {
       if (!from && !to) return null
       const r: any = {}
-      if (from) r.gte = new Date(from)
-      if (to) { const d = new Date(to); d.setHours(23, 59, 59, 999); r.lte = d }
+      const gteDate = parseDate(from)
+      const lteDate = parseDate(to)
+      if (gteDate) r.gte = gteDate
+      if (lteDate) { lteDate.setHours(23, 59, 59, 999); r.lte = lteDate }
+      if (!r.gte && !r.lte) return null
       return r
     }
     const range = buildRange()
@@ -187,7 +196,7 @@ export default async function publisherRoutes(server: FastifyInstance) {
         const user = await prisma.user.findUnique({ where: { id } })
         const valid = await bcrypt.compare(currentPassword, user!.password)
         if (!valid) return reply.code(400).send({ error: 'Invalid current password' })
-        data.password = await bcrypt.hash(password, 10)
+        data.password = await bcrypt.hash(password, 12)
       }
 
       const updated = await prisma.user.update({ where: { id }, data, select: { id: true, email: true, name: true, postbackUrl: true } })

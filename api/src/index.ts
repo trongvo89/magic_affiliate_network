@@ -30,13 +30,22 @@ declare module '@fastify/jwt' {
 }
 
 async function start() {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+    throw new Error('JWT_SECRET env var must be set and at least 32 characters long')
+  }
+
+  const corsOrigin = process.env.CORS_ORIGIN
+  if (process.env.NODE_ENV === 'production' && (!corsOrigin || corsOrigin === '*')) {
+    console.warn('WARNING: CORS_ORIGIN is not set or is wildcard in production — restricting CORS')
+  }
+
   await server.register(cors, {
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: corsOrigin || (process.env.NODE_ENV !== 'production' ? true : false),
     credentials: true,
   })
 
   await server.register(jwt, {
-    secret: process.env.JWT_SECRET || 'fallback-secret-change-in-production',
+    secret: process.env.JWT_SECRET,
     sign: { expiresIn: '7d' },
   })
 
