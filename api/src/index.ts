@@ -8,6 +8,7 @@ import postbackRoutes from './routes/postback'
 import authRoutes from './routes/auth'
 import adminRoutes from './routes/admin'
 import publisherRoutes from './routes/publisher'
+import clickRoutes from './routes/click'
 
 dotenv.config()
 
@@ -45,6 +46,7 @@ async function start() {
   await server.register(authRoutes, { prefix: '/auth' })
   await server.register(adminRoutes, { prefix: '/admin' })
   await server.register(publisherRoutes, { prefix: '/publisher' })
+  await server.register(clickRoutes, { prefix: '/click' })
 
   server.get('/health', async () => ({ status: 'ok', ts: new Date().toISOString() }))
 

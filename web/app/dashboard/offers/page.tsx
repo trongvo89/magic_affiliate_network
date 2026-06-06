@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { api, fmtMoney } from '@/lib/api'
+import { api, fmtMoney, getUser } from '@/lib/api'
 
 interface OfferSummary {
   offerId: string
@@ -15,17 +15,33 @@ interface OfferSummary {
   totalRevenue: number
 }
 
+interface CityAdsOffer {
+  id: string
+  name: string
+  appName: string
+  commissionType: string
+  commissionValue: number
+  currency: string
+}
+
 export default function PublisherOffersPage() {
   const [data, setData] = useState<OfferSummary[]>([])
+  const [cityAdsOffers, setCityAdsOffers] = useState<CityAdsOffer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [copied, setCopied] = useState<string | null>(null)
+  const pubId = getUser()?.id ?? ''
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const res = await api.get('/publisher/offers-summary')
-      setData(res.data)
+      const [summaryRes, cityAdsRes] = await Promise.all([
+        api.get('/publisher/offers-summary'),
+        api.get('/publisher/cityads-offers'),
+      ])
+      setData(summaryRes.data)
+      setCityAdsOffers(cityAdsRes.data)
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Failed to load')
     } finally {
@@ -34,6 +50,18 @@ export default function PublisherOffersPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  function trackingLink(offerId: string) {
+    if (typeof window === 'undefined') return ''
+    return `${window.location.origin}/api-proxy/click/cityads/${offerId}?pub=${pubId}`
+  }
+
+  async function copyLink(offerId: string) {
+    const link = trackingLink(offerId)
+    await navigator.clipboard.writeText(link)
+    setCopied(offerId)
+    setTimeout(() => setCopied(null), 2000)
+  }
 
   const mmpBadge = (s: string) => {
     const styles: Record<string, string> = {
@@ -81,6 +109,56 @@ export default function PublisherOffersPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {cityAdsOffers.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+          <div className="p-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-900">CityAds Tracking Links</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Copy your unique link for each offer and use it to drive traffic</p>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+              <tr>
+                {['Offer', 'Commission', 'Your Tracking Link'].map((h) => (
+                  <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {cityAdsOffers.map((o) => (
+                <tr key={o.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-gray-900">{o.name}</div>
+                    <div className="text-xs text-gray-400">{o.appName}</div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                    {o.commissionType === 'FLAT_CPA'
+                      ? `$${o.commissionValue.toFixed(2)} CPA`
+                      : `${o.commissionValue}% Rev`}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-gray-500 truncate max-w-xs">
+                        {pubId ? trackingLink(o.id) : '—'}
+                      </span>
+                      <button
+                        onClick={() => copyLink(o.id)}
+                        className={`flex-shrink-0 text-xs px-2.5 py-1 rounded-md font-medium border transition-colors ${
+                          copied === o.id
+                            ? 'bg-green-50 border-green-200 text-green-700'
+                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        {copied === o.id ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

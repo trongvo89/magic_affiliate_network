@@ -133,15 +133,15 @@ export default async function adminRoutes(server: FastifyInstance) {
     return Object.values(summary).sort((a: any, b: any) => b.total - a.total)
   })
 
-  server.post<{ Body: { name: string; appName: string; appId: string; mmpSource: string; commissionType: string; commissionValue: number; currency: string } }>(
+  server.post<{ Body: { name: string; appName: string; appId: string; mmpSource: string; commissionType: string; commissionValue: number; currency: string; destinationUrl?: string } }>(
     '/offers',
     async (request, reply) => {
-      const { name, appName, appId, mmpSource, commissionType, commissionValue, currency } = request.body
+      const { name, appName, appId, mmpSource, commissionType, commissionValue, currency, destinationUrl } = request.body
       if (!name || !appName || !appId || !mmpSource || !commissionType || commissionValue == null) {
         return reply.code(400).send({ error: 'Missing fields' })
       }
       const offer = await prisma.offer.create({
-        data: { name, appName, appId, mmpSource: mmpSource as any, commissionType: commissionType as any, commissionValue, currency: currency || 'USD' },
+        data: { name, appName, appId, mmpSource: mmpSource as any, commissionType: commissionType as any, commissionValue, currency: currency || 'USD', destinationUrl: destinationUrl || null },
       })
       return reply.code(201).send(offer)
     }

@@ -31,7 +31,7 @@ interface OfferSummary {
   publisherCount: number
 }
 
-const empty = { name: '', appName: '', appId: '', mmpSource: 'APPSFLYER', commissionType: 'FLAT_CPA', commissionValue: '', currency: 'USD' }
+const empty = { name: '', appName: '', appId: '', mmpSource: 'APPSFLYER', commissionType: 'FLAT_CPA', commissionValue: '', currency: 'USD', destinationUrl: '' }
 
 export default function OffersPage() {
   const [tab, setTab] = useState<'manage' | 'performance'>('manage')
@@ -69,7 +69,7 @@ export default function OffersPage() {
     setError('')
     setSaving(true)
     try {
-      await api.post('/admin/offers', { ...form, commissionValue: parseFloat(form.commissionValue) })
+      await api.post('/admin/offers', { ...form, commissionValue: parseFloat(form.commissionValue), destinationUrl: form.destinationUrl || undefined })
       setShowModal(false)
       setForm({ ...empty })
       await loadOffers()
@@ -324,6 +324,19 @@ export default function OffersPage() {
                   </select>
                 </div>
               </div>
+              {form.mmpSource === 'CITYADS' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Destination URL</label>
+                  <input
+                    type="url"
+                    value={form.destinationUrl}
+                    onChange={(e) => setForm({ ...form, destinationUrl: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="https://cityads.com/offer/..."
+                  />
+                  <p className="text-xs text-gray-400 mt-1">CityAds offer landing page — publishers will be redirected here</p>
+                </div>
+              )}
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
