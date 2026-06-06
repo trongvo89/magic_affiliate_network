@@ -17,32 +17,37 @@ export default async function publisherRoutes(server: FastifyInstance) {
 
   server.addHook('preHandler', requireActivePublisher)
 
-  server.get('/stats', async (request) => {
+  server.get<{ Querystring: { from?: string; to?: string } }>('/stats', async (request) => {
     const { id } = request.user as any
-    const now = new Date()
-    const start30d = new Date(now.getTime() - 30 * 86400000)
-    const start7d = new Date(now.getTime() - 7 * 86400000)
-    const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0)
+    const { from, to } = request.query
 
-    const [today, week, month, approved, approvedCount, totalClicks, clicksMonth] = await Promise.all([
-      prisma.conversion.aggregate({ where: { publisherId: id, receivedAt: { gte: startOfDay } }, _sum: { commissionAmount: true }, _count: true }),
-      prisma.conversion.aggregate({ where: { publisherId: id, receivedAt: { gte: start7d } }, _sum: { commissionAmount: true }, _count: true }),
-      prisma.conversion.aggregate({ where: { publisherId: id, receivedAt: { gte: start30d } }, _sum: { commissionAmount: true }, _count: true }),
+    const now = new Date()
+    const defaultFrom = new Date(now.getTime() - 30 * 86400000)
+    const fromDate = from ? new Date(from) : defaultFrom
+    const toDate = to ? (() => { const d = new Date(to); d.setHours(23, 59, 59, 999); return d })() : now
+
+    const dateRange = { gte: fromDate, lte: toDate }
+
+    const [rangeConv, rangeApproved, rangeClicks, totalApprovedAgg] = await Promise.all([
+      prisma.conversion.aggregate({ where: { publisherId: id, eventAt: dateRange }, _sum: { commissionAmount: true }, _count: true }),
+      prisma.conversion.aggregate({ where: { publisherId: id, status: 'APPROVED', eventAt: dateRange }, _sum: { commissionAmount: true }, _count: true }),
+      prisma.click.count({ where: { publisherId: id, clickedAt: dateRange } }),
       prisma.conversion.aggregate({ where: { publisherId: id, status: 'APPROVED' }, _sum: { commissionAmount: true } }),
-      prisma.conversion.count({ where: { publisherId: id, status: 'APPROVED' } }),
-      prisma.click.count({ where: { publisherId: id } }),
-      prisma.click.count({ where: { publisherId: id, clickedAt: { gte: start30d } } }),
     ])
 
-    const totalCommission = approved._sum.commissionAmount ?? 0
+    const approvedCount = rangeApproved._count
+    const approvedEarned = rangeApproved._sum.commissionAmount ?? 0
     return {
-      today: { conversions: today._count, earned: today._sum.commissionAmount ?? 0 },
-      week: { conversions: week._count, earned: week._sum.commissionAmount ?? 0 },
-      month: { conversions: month._count, earned: month._sum.commissionAmount ?? 0, clicks: clicksMonth },
-      totalApproved: totalCommission,
-      totalClicks,
-      cvr: totalClicks > 0 ? parseFloat(((approvedCount / totalClicks) * 100).toFixed(2)) : 0,
-      epc: totalClicks > 0 ? parseFloat((totalCommission / totalClicks).toFixed(4)) : 0,
+      range: {
+        conversions: rangeConv._count,
+        clicks: rangeClicks,
+        earned: rangeConv._sum.commissionAmount ?? 0,
+        approvedConversions: approvedCount,
+        approvedEarned,
+      },
+      totalApproved: totalApprovedAgg._sum.commissionAmount ?? 0,
+      cvr: rangeClicks > 0 ? parseFloat(((approvedCount / rangeClicks) * 100).toFixed(2)) : 0,
+      epc: rangeClicks > 0 ? parseFloat((approvedEarned / rangeClicks).toFixed(4)) : 0,
     }
   })
 

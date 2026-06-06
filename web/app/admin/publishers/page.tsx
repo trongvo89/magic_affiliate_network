@@ -22,27 +22,36 @@ interface PubStat {
   epc: number
 }
 
+function toDateStr(d: Date) {
+  return d.toISOString().slice(0, 10)
+}
+
 export default function PublishersPage() {
   const [publishers, setPublishers] = useState<Publisher[]>([])
   const [statsMap, setStatsMap] = useState<Record<string, PubStat>>({})
   const [actionId, setActionId] = useState<string | null>(null)
+  const [from, setFrom] = useState(() => toDateStr(new Date(Date.now() - 30 * 86400000)))
+  const [to, setTo] = useState(() => toDateStr(new Date()))
 
-  async function load() {
-    const [{ data: pubs }, { data: stats }] = await Promise.all([
-      api.get('/admin/publishers'),
-      api.get('/admin/publisher-stats'),
-    ])
-    setPublishers(pubs)
+  async function loadPublishers() {
+    const { data } = await api.get('/admin/publishers')
+    setPublishers(data)
+  }
+
+  async function loadStats() {
+    const { data } = await api.get('/admin/publisher-stats', { params: { from, to } })
     const map: Record<string, PubStat> = {}
-    for (const s of stats) map[s.publisherId] = s
+    for (const s of data) map[s.publisherId] = s
     setStatsMap(map)
   }
-  useEffect(() => { load() }, [])
+
+  useEffect(() => { loadPublishers() }, [])
+  useEffect(() => { loadStats() }, [from, to])
 
   async function setStatus(id: string, status: string) {
     setActionId(id)
     await api.put(`/admin/publishers/${id}`, { status })
-    await load()
+    await loadPublishers()
     setActionId(null)
   }
 
@@ -57,7 +66,40 @@ export default function PublishersPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-xl font-bold text-gray-900 mb-6">Publishers</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-bold text-gray-900">Publishers</h1>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">Stats range:</span>
+          <input
+            type="date"
+            value={from}
+            max={to}
+            onChange={e => setFrom(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+          <span className="text-gray-400">→</span>
+          <input
+            type="date"
+            value={to}
+            min={from}
+            onChange={e => setTo(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+          {[
+            { label: '7d', days: 7 },
+            { label: '30d', days: 30 },
+            { label: '90d', days: 90 },
+          ].map(({ label, days }) => (
+            <button
+              key={label}
+              onClick={() => { setFrom(toDateStr(new Date(Date.now() - days * 86400000))); setTo(toDateStr(new Date())) }}
+              className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <table className="w-full text-sm">

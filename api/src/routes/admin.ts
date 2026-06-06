@@ -320,12 +320,23 @@ export default async function adminRoutes(server: FastifyInstance) {
   )
 
   // Per-publisher click + conversion stats (for CVR/EPC)
-  server.get('/publisher-stats', async () => {
+  server.get<{ Querystring: { from?: string; to?: string } }>('/publisher-stats', async (request) => {
+    const { from, to } = request.query
+    const clickWhere: any = {}
+    const convWhere: any = { publisherId: { not: null }, status: 'APPROVED' }
+    if (from || to) {
+      const range: any = {}
+      if (from) range.gte = new Date(from)
+      if (to) { const d = new Date(to); d.setHours(23, 59, 59, 999); range.lte = d }
+      clickWhere.clickedAt = range
+      convWhere.eventAt = range
+    }
+
     const [clickGroups, approvedGroups] = await Promise.all([
-      prisma.click.groupBy({ by: ['publisherId'], _count: { id: true } }),
+      prisma.click.groupBy({ by: ['publisherId'], where: clickWhere, _count: { id: true } }),
       prisma.conversion.groupBy({
         by: ['publisherId'],
-        where: { publisherId: { not: null }, status: 'APPROVED' },
+        where: convWhere,
         _count: { id: true },
         _sum: { commissionAmount: true },
       }),
