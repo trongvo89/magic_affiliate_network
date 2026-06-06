@@ -7,6 +7,14 @@ const nextConfig = {
         source: '/api-proxy/:path*',
         destination: `${dest}/:path*`,
       },
+      {
+        source: '/postback/:path*',
+        destination: `${dest}/postback/:path*`,
+      },
+      {
+        source: '/click/:path*',
+        destination: `${dest}/click/:path*`,
+      },
     ]
   },
 }
