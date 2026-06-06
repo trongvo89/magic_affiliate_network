@@ -51,6 +51,7 @@ export default function ConversionsPage() {
   const [csvResult, setCsvResult] = useState<{ success: number; failed: number; errors: string[] } | null>(null)
   const [csvValidateFrom, setCsvValidateFrom] = useState('')
   const [csvValidateTo, setCsvValidateTo] = useState('')
+  const [csvOfferLock, setCsvOfferLock] = useState('')
 
   const limit = 20
 
@@ -133,18 +134,18 @@ export default function ConversionsPage() {
 
   function resetCsv() {
     setCsvText(''); setCsvParsed([]); setCsvError(''); setCsvResult(null)
-    setCsvValidateFrom(''); setCsvValidateTo('')
+    setCsvValidateFrom(''); setCsvValidateTo(''); setCsvOfferLock('')
   }
 
-  function parseCsvCreate(text: string, valFrom = csvValidateFrom, valTo = csvValidateTo) {
+  function parseCsvCreate(text: string, valFrom = csvValidateFrom, valTo = csvValidateTo, offerLock = csvOfferLock) {
     setCsvError(''); setCsvResult(null)
     const lines = text.trim().split('\n').filter(Boolean)
     if (lines.length < 2) { setCsvError('Cần ít nhất 1 dòng dữ liệu sau header'); setCsvParsed([]); return }
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
     const hasPublisher = headers.includes('publisher_id') || headers.includes('publisher_email')
-    const hasOffer = headers.includes('offer_id') || headers.includes('offer_name')
+    const hasOffer = !!offerLock || headers.includes('offer_id') || headers.includes('offer_name')
     if (!hasPublisher) { setCsvError('Thiếu cột: publisher_id hoặc publisher_email'); setCsvParsed([]); return }
-    if (!hasOffer) { setCsvError('Thiếu cột: offer_id hoặc offer_name'); setCsvParsed([]); return }
+    if (!hasOffer) { setCsvError('Thiếu cột: offer_id hoặc offer_name (hoặc chọn offer ở ô bên trên)'); setCsvParsed([]); return }
     const missingCols = ['event_type', 'event_at'].filter(r => !headers.includes(r))
     if (missingCols.length) { setCsvError(`Thiếu cột: ${missingCols.join(', ')}`); setCsvParsed([]); return }
 
@@ -172,7 +173,7 @@ export default function ConversionsPage() {
       }
       if (!publisherId) { errors.push(`Row ${lineIdx + 2}: missing publisher_id or publisher_email`); return }
 
-      let offerId = row['offer_id'] || ''
+      let offerId = offerLock || row['offer_id'] || ''
       if (!offerId && row['offer_name']) {
         offerId = offerNameMap[row['offer_name'].toLowerCase()] || ''
         if (!offerId) { errors.push(`Row ${lineIdx + 2}: offer_name "${row['offer_name']}" not found`); return }
@@ -231,7 +232,7 @@ export default function ConversionsPage() {
     reader.onload = (ev) => {
       const text = ev.target?.result as string
       setCsvText(text)
-      if (csvTab === 'create') parseCsvCreate(text)
+      if (csvTab === 'create') parseCsvCreate(text, csvValidateFrom, csvValidateTo, csvOfferLock)
       else parseCsvUpdate(text)
     }
     reader.readAsText(file)
@@ -259,8 +260,10 @@ export default function ConversionsPage() {
   function downloadTemplate() {
     let content: string
     if (csvTab === 'create') {
-      const header = 'publisher_id,publisher_email,offer_id,offer_name,event_type,revenue,event_at,source_ref_id,status'
-      const example = `${publishers[0]?.id || 'PUBLISHER_ID'},,${offers[0]?.id || 'OFFER_ID'},,purchase,25.50,${new Date().toISOString().slice(0, 10)},ref-001,APPROVED`
+      const offerCols = csvOfferLock ? '' : ',offer_id,offer_name'
+      const header = `publisher_id,publisher_email${offerCols},event_type,revenue,event_at,source_ref_id,status`
+      const offerVals = csvOfferLock ? '' : `,${offers[0]?.id || 'OFFER_ID'},`
+      const example = `${publishers[0]?.id || 'PUBLISHER_ID'},${offerVals},purchase,25.50,${new Date().toISOString().slice(0, 10)},ref-001,APPROVED`
       content = header + '\n' + example
     } else {
       const header = 'source_ref_id,status'
@@ -537,8 +540,12 @@ export default function ConversionsPage() {
                 <code className="font-mono">event_type, event_at</code>
                 <p className="font-medium mt-2 mb-1">Publisher (một trong hai):</p>
                 <code className="font-mono">publisher_id</code> <span className="text-gray-400">hoặc</span> <code className="font-mono">publisher_email</code>
-                <p className="font-medium mt-2 mb-1">Offer (một trong hai):</p>
-                <code className="font-mono">offer_id</code> <span className="text-gray-400">hoặc</span> <code className="font-mono">offer_name</code>
+                {!csvOfferLock && (
+                  <>
+                    <p className="font-medium mt-2 mb-1">Offer (một trong hai — bỏ qua nếu chọn offer ở dưới):</p>
+                    <code className="font-mono">offer_id</code> <span className="text-gray-400">hoặc</span> <code className="font-mono">offer_name</code>
+                  </>
+                )}
                 <p className="font-medium mt-2 mb-1">Cột tùy chọn:</p>
                 <code className="font-mono">revenue, source_ref_id, status</code>
                 <p className="mt-1 text-gray-400">status: PENDING (mặc định) · APPROVED · REJECTED</p>
@@ -557,30 +564,47 @@ export default function ConversionsPage() {
               Download template CSV
             </button>
 
-            {/* Date range validation (create only) */}
+            {/* Offer lock + date range validation (create only) */}
             {csvTab === 'create' && (
-              <div className="mb-4">
-                <p className="text-xs font-medium text-gray-600 mb-2">Kiểm tra ngày (tùy chọn) — từ chối dòng ngoài khoảng:</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Từ ngày</label>
-                    <input type="date" value={csvValidateFrom}
-                      onChange={e => {
-                        const v = e.target.value
-                        setCsvValidateFrom(v)
-                        if (csvText) parseCsvCreate(csvText, v, csvValidateTo)
-                      }}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Đến ngày</label>
-                    <input type="date" value={csvValidateTo}
-                      onChange={e => {
-                        const v = e.target.value
-                        setCsvValidateTo(v)
-                        if (csvText) parseCsvCreate(csvText, csvValidateFrom, v)
-                      }}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <div className="mb-4 space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                    Áp dụng cho offer <span className="text-gray-400 font-normal">(tùy chọn — bỏ qua cột offer trong CSV)</span>
+                  </label>
+                  <select value={csvOfferLock}
+                    onChange={e => {
+                      const v = e.target.value
+                      setCsvOfferLock(v)
+                      if (csvText) parseCsvCreate(csvText, csvValidateFrom, csvValidateTo, v)
+                    }}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">— Tất cả / lấy từ CSV —</option>
+                    {offers.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-600 mb-1.5">Kiểm tra ngày <span className="text-gray-400 font-normal">(tùy chọn — từ chối dòng ngoài khoảng)</span></p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Từ ngày</label>
+                      <input type="date" value={csvValidateFrom}
+                        onChange={e => {
+                          const v = e.target.value
+                          setCsvValidateFrom(v)
+                          if (csvText) parseCsvCreate(csvText, v, csvValidateTo, csvOfferLock)
+                        }}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Đến ngày</label>
+                      <input type="date" value={csvValidateTo}
+                        onChange={e => {
+                          const v = e.target.value
+                          setCsvValidateTo(v)
+                          if (csvText) parseCsvCreate(csvText, csvValidateFrom, v, csvOfferLock)
+                        }}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -599,7 +623,7 @@ export default function ConversionsPage() {
               onChange={(e) => {
                 setCsvText(e.target.value)
                 if (e.target.value) {
-                  if (csvTab === 'create') parseCsvCreate(e.target.value)
+                  if (csvTab === 'create') parseCsvCreate(e.target.value, csvValidateFrom, csvValidateTo, csvOfferLock)
                   else parseCsvUpdate(e.target.value)
                 } else {
                   setCsvParsed([]); setCsvError('')
@@ -607,7 +631,9 @@ export default function ConversionsPage() {
               }}
               rows={6}
               placeholder={csvTab === 'create'
-                ? 'publisher_email,offer_name,event_type,revenue,event_at,status\njohn@example.com,Shopee VN CPS,purchase,25.50,2026-05-28,APPROVED'
+                ? (csvOfferLock
+                  ? 'publisher_email,event_type,revenue,event_at,status\njohn@example.com,purchase,25.50,2026-05-28,APPROVED'
+                  : 'publisher_email,offer_name,event_type,revenue,event_at,status\njohn@example.com,Shopee VN CPS,purchase,25.50,2026-05-28,APPROVED')
                 : 'source_ref_id,status\nref-001,APPROVED\nref-002,REJECTED'}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
             />

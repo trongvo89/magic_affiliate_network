@@ -37,6 +37,7 @@ export default function PublisherOffersPage() {
   const [copied, setCopied] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [exportOfferId, setExportOfferId] = useState('')
   const [from, setFrom] = useState(() => toDateStr(new Date(Date.now() - 30 * 86400000)))
   const [to, setTo] = useState(() => toDateStr(new Date()))
   const pubId = getUser()?.id ?? ''
@@ -75,6 +76,7 @@ export default function PublisherOffersPage() {
     setExporting(true)
     try {
       const params = new URLSearchParams({ from, to })
+      if (exportOfferId) params.set('offerId', exportOfferId)
       const { data } = await api.get(`/publisher/conversions/export?${params}`, { responseType: 'blob' })
       const url = URL.createObjectURL(new Blob([data], { type: 'text/csv' }))
       const a = document.createElement('a')
@@ -209,13 +211,22 @@ export default function PublisherOffersPage() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="p-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="font-semibold text-gray-900">By Offer</h2>
-          <button onClick={exportCsv} disabled={exporting}
-            className="flex items-center gap-1.5 text-sm border border-gray-200 hover:bg-gray-50 disabled:opacity-50 text-gray-600 px-3 py-1.5 rounded-lg font-medium transition-colors">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            {exporting ? 'Exporting...' : 'Export CSV'}
-          </button>
+          <div className="flex items-center gap-2">
+            <select value={exportOfferId} onChange={e => setExportOfferId(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 text-gray-600">
+              <option value="">All Offers</option>
+              {data.map(row => (
+                <option key={row.offerId} value={row.offerId}>{row.offerName}</option>
+              ))}
+            </select>
+            <button onClick={exportCsv} disabled={exporting}
+              className="flex items-center gap-1.5 text-sm border border-gray-200 hover:bg-gray-50 disabled:opacity-50 text-gray-600 px-3 py-1.5 rounded-lg font-medium transition-colors">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              {exporting ? 'Exporting...' : 'Export CSV'}
+            </button>
+          </div>
         </div>
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
