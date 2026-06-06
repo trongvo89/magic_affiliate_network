@@ -12,7 +12,7 @@ interface Stats {
 interface Conversion {
   id: string
   eventAt: string
-  offer: { name: string; mmpSource: string }
+  offer: { name: string }
   eventType: string
   revenue: number
   commissionAmount: number
@@ -58,15 +58,6 @@ export default function DashboardPage() {
       REJECTED: 'bg-red-100 text-red-700',
     }
     return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cls[s] || 'bg-gray-100 text-gray-600'}`}>{s}</span>
-  }
-
-  const mmpBadge = (s: string) => {
-    const styles: Record<string, string> = {
-      APPSFLYER: 'bg-blue-100 text-blue-700',
-      ADJUST: 'bg-purple-100 text-purple-700',
-      CITYADS: 'bg-orange-100 text-orange-700',
-    }
-    return <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles[s] ?? 'bg-gray-100 text-gray-600'}`}>{s}</span>
   }
 
   return (
@@ -148,7 +139,7 @@ export default function DashboardPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>
-              {['Date', 'Offer', 'MMP', 'Event', 'Revenue', 'Commission', 'Status'].map((h) => (
+              {['Date', 'Offer', 'Event', 'Revenue', 'Commission', 'Status'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
               ))}
             </tr>
@@ -158,7 +149,6 @@ export default function DashboardPage() {
               <tr key={c.id} className="hover:bg-gray-50">
                 <td className="px-4 py-2.5 text-gray-500 text-xs whitespace-nowrap">{fmtDate(c.eventAt)}</td>
                 <td className="px-4 py-2.5 font-medium text-gray-900">{c.offer?.name}</td>
-                <td className="px-4 py-2.5">{mmpBadge(c.offer?.mmpSource)}</td>
                 <td className="px-4 py-2.5 text-gray-600 capitalize">{c.eventType}</td>
                 <td className="px-4 py-2.5 text-gray-900">{fmtMoney(c.revenue, c.currency)}</td>
                 <td className="px-4 py-2.5 text-green-700 font-medium">{fmtMoney(c.commissionAmount, c.currency)}</td>
@@ -166,10 +156,10 @@ export default function DashboardPage() {
               </tr>
             ))}
             {conversions.length === 0 && !loading && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No conversions yet</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No conversions yet</td></tr>
             )}
             {loading && conversions.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
             )}
           </tbody>
         </table>
