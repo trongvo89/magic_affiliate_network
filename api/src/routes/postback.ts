@@ -88,6 +88,8 @@ export default async function postbackRoutes(server: FastifyInstance) {
           event: eventType,
           order_id: sourceRefId,
           status: 'approved',
+          offer_id: offer.id,
+          offer_name: offer.name,
         }))
       }
     } catch (err: any) {
@@ -142,6 +144,8 @@ export default async function postbackRoutes(server: FastifyInstance) {
           event: eventType,
           order_id: sourceRefId,
           status: 'approved',
+          offer_id: offer.id,
+          offer_name: offer.name,
         }))
       }
     } catch (err: any) {
@@ -203,6 +207,8 @@ export default async function postbackRoutes(server: FastifyInstance) {
           event: eventType,
           order_id: sourceRefId,
           status: 'approved',
+          offer_id: offer.id,
+          offer_name: offer.name,
         }))
       }
     } catch (err: any) {

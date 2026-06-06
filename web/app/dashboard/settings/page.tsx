@@ -56,8 +56,10 @@ export default function SettingsPage() {
         .replace(/{event}/g, 'test')
         .replace(/{order_id}/g, 'TEST_ORDER')
         .replace(/{status}/g, 'approved')
+        .replace(/{offer_id}/g, 'TEST_OFFER_ID')
+        .replace(/{offer_name}/g, 'Test+Offer')
       await api.get('/publisher/profile')
-      setTestResult({ ok: true, msg: `Test postback would fire to: ${url.substring(0, 80)}...` })
+      setTestResult({ ok: true, msg: `Test postback would fire to: ${url.substring(0, 100)}...` })
     } catch {
       setTestResult({ ok: false, msg: 'Could not validate URL' })
     } finally {
@@ -115,10 +117,23 @@ export default function SettingsPage() {
           <p className="text-xs text-gray-500 mb-4">Your tracker URL to receive conversion notifications.</p>
 
           <div className="bg-orange-50 rounded-lg p-3 mb-4 border border-orange-100">
-            <p className="text-xs font-medium text-orange-800 mb-1">Available macros:</p>
-            <code className="text-xs text-orange-700 font-mono">
-              {'{payout}'} &nbsp; {'{event}'} &nbsp; {'{order_id}'} &nbsp; {'{status}'} &nbsp; {'{click_id}'}
-            </code>
+            <p className="text-xs font-medium text-orange-800 mb-2">Available macros:</p>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono text-orange-700">
+              {[
+                ['{payout}', 'Hoa hồng được nhận'],
+                ['{event}', 'Loại event (sale, lead…)'],
+                ['{order_id}', 'Click/transaction ID từ MMP'],
+                ['{status}', 'Trạng thái (approved)'],
+                ['{click_id}', 'Publisher ID của bạn'],
+                ['{offer_id}', 'ID offer trong Magic'],
+                ['{offer_name}', 'Tên offer trong Magic'],
+              ].map(([macro, desc]) => (
+                <div key={macro} className="flex items-baseline gap-2">
+                  <span className="font-semibold whitespace-nowrap">{macro}</span>
+                  <span className="text-orange-500 text-[10px]">{desc}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="space-y-3">
