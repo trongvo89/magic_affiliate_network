@@ -140,10 +140,17 @@ export default async function adminRoutes(server: FastifyInstance) {
       if (!name || !appName || !appId || !mmpSource || !commissionType || commissionValue == null) {
         return reply.code(400).send({ error: 'Missing fields' })
       }
-      const offer = await prisma.offer.create({
-        data: { name, appName, appId, mmpSource: mmpSource as any, commissionType: commissionType as any, commissionValue, currency: currency || 'USD', destinationUrl: destinationUrl || null },
-      })
-      return reply.code(201).send(offer)
+      try {
+        const offer = await prisma.offer.create({
+          data: { name, appName, appId, mmpSource: mmpSource as any, commissionType: commissionType as any, commissionValue, currency: currency || 'USD', destinationUrl: destinationUrl || null },
+        })
+        return reply.code(201).send(offer)
+      } catch (err: any) {
+        if (err.code === 'P2002') {
+          return reply.code(400).send({ error: 'An offer with this App ID / CityAds Offer ID already exists' })
+        }
+        throw err
+      }
     }
   )
 
