@@ -38,6 +38,7 @@ export default function PublisherOffersPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   const [exportOfferId, setExportOfferId] = useState('')
+  const [trackingBase, setTrackingBase] = useState('')
   const [from, setFrom] = useState(() => toDateStr(new Date(Date.now() - 30 * 86400000)))
   const [to, setTo] = useState(() => toDateStr(new Date()))
   const pubId = getUser()?.id ?? ''
@@ -61,9 +62,16 @@ export default function PublisherOffersPage() {
 
   useEffect(() => { load() }, [load])
 
+  useEffect(() => {
+    api.get('/config/public').then(res => {
+      if (res.data.trackingDomain) setTrackingBase(res.data.trackingDomain)
+    }).catch(() => {})
+  }, [])
+
   function trackingLink(offerId: string) {
     if (typeof window === 'undefined') return ''
-    return `${window.location.origin}/api-proxy/click/cityads/${offerId}?pub=${pubId}`
+    const base = trackingBase || `${window.location.origin}/api-proxy`
+    return `${base}/click/cityads/${offerId}?pub=${pubId}`
   }
 
   function copyId(id: string) {

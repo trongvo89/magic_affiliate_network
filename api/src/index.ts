@@ -59,6 +59,11 @@ async function start() {
 
   server.get('/health', async () => ({ status: 'ok', ts: new Date().toISOString() }))
 
+  // Public config — no auth required, safe to expose
+  server.get('/config/public', async () => ({
+    trackingDomain: process.env.TRACKING_DOMAIN?.replace(/\/$/, '') || null,
+  }))
+
   const port = parseInt(process.env.PORT || '4000')
   const host = process.env.HOST || '0.0.0.0'
 
