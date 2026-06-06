@@ -367,6 +367,51 @@ export default async function adminRoutes(server: FastifyInstance) {
     })
   })
 
+  // All users (for team management)
+  server.get('/users', async () => {
+    return prisma.user.findMany({
+      orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true, name: true, email: true, role: true, status: true, createdAt: true },
+    })
+  })
+
+  server.put<{ Params: { id: string }; Body: { role?: string; status?: string } }>(
+    '/users/:id',
+    async (request, reply) => {
+      const requesterId = (request.user as any).id
+      const { id } = request.params
+      const { role, status } = request.body
+
+      if (role && role !== 'ADMIN' && role !== 'PUBLISHER') {
+        return reply.code(400).send({ error: 'Invalid role' })
+      }
+
+      // Prevent self-demotion
+      if (role === 'PUBLISHER' && id === requesterId) {
+        return reply.code(400).send({ error: 'Cannot remove your own admin role' })
+      }
+
+      // Prevent demoting the last admin
+      if (role === 'PUBLISHER') {
+        const adminCount = await prisma.user.count({ where: { role: 'ADMIN' } })
+        if (adminCount <= 1) {
+          return reply.code(400).send({ error: 'Cannot demote the last admin' })
+        }
+      }
+
+      const data: any = {}
+      if (role) data.role = role
+      if (status) data.status = status
+
+      const updated = await prisma.user.update({
+        where: { id },
+        data,
+        select: { id: true, name: true, email: true, role: true, status: true },
+      })
+      return updated
+    }
+  )
+
   // Publishers
   server.get('/publishers', async () => {
     return prisma.user.findMany({
