@@ -64,6 +64,13 @@ export default function OffersPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [loadingPerf, setLoadingPerf] = useState(false)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  function copyId(id: string) {
+    navigator.clipboard.writeText(id)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId(null), 1500)
+  }
   const [from, setFrom] = useState(() => toDateStr(new Date(Date.now() - 30 * 86400000)))
   const [to, setTo] = useState(() => toDateStr(new Date()))
   const [expandedOfferId, setExpandedOfferId] = useState<string | null>(null)
@@ -235,7 +242,7 @@ export default function OffersPage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
               <tr>
-                {['Name', 'App', 'MMP', 'Commission', 'Currency', 'Conversions', 'Status', 'Actions'].map((h) => (
+                {['Offer ID', 'Name', 'App', 'MMP', 'Commission', 'Currency', 'Conversions', 'Status', 'Actions'].map((h) => (
                   <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
                 ))}
               </tr>
@@ -243,6 +250,14 @@ export default function OffersPage() {
             <tbody className="divide-y divide-gray-100">
               {offers.map((o) => (
                 <tr key={o.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1.5">
+                      <code className="text-xs font-mono text-gray-400 truncate max-w-[90px]">{o.id}</code>
+                      <button onClick={() => copyId(o.id)} className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors whitespace-nowrap ${copiedId === o.id ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
+                        {copiedId === o.id ? '✓' : 'Copy'}
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 font-medium text-gray-900">{o.name}</td>
                   <td className="px-4 py-3 text-gray-600">
                     <div>{o.appName}</div>
@@ -284,7 +299,7 @@ export default function OffersPage() {
                 </tr>
               ))}
               {offers.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No offers yet</td></tr>
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No offers yet</td></tr>
               )}
             </tbody>
           </table>

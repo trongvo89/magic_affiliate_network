@@ -35,6 +35,7 @@ export default function PublisherOffersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
   const [from, setFrom] = useState(() => toDateStr(new Date(Date.now() - 30 * 86400000)))
   const [to, setTo] = useState(() => toDateStr(new Date()))
   const pubId = getUser()?.id ?? ''
@@ -61,6 +62,12 @@ export default function PublisherOffersPage() {
   function trackingLink(offerId: string) {
     if (typeof window === 'undefined') return ''
     return `${window.location.origin}/api-proxy/click/cityads/${offerId}?pub=${pubId}`
+  }
+
+  function copyId(id: string) {
+    navigator.clipboard.writeText(id)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId(null), 1500)
   }
 
   async function copyLink(offerId: string) {
@@ -187,7 +194,7 @@ export default function PublisherOffersPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>
-              {['Offer', 'Clicks', 'Approved', 'Pending', 'Rejected', 'CVR', 'EPC', 'Commission Earned'].map((h) => (
+              {['Offer ID', 'Offer', 'Clicks', 'Approved', 'Pending', 'Rejected', 'CVR', 'EPC', 'Commission Earned'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
               ))}
             </tr>
@@ -195,6 +202,14 @@ export default function PublisherOffersPage() {
           <tbody className="divide-y divide-gray-100">
             {data.map((row) => (
               <tr key={row.offerId} className="hover:bg-gray-50">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    <code className="text-xs font-mono text-gray-400 truncate max-w-[90px]">{row.offerId}</code>
+                    <button onClick={() => copyId(row.offerId)} className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors whitespace-nowrap ${copiedId === row.offerId ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
+                      {copiedId === row.offerId ? '✓' : 'Copy'}
+                    </button>
+                  </div>
+                </td>
                 <td className="px-4 py-3 font-medium text-gray-900">{row.offerName}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">{row.clicks ?? 0}</td>
                 <td className="px-4 py-3 font-medium text-green-700">{row.approved}</td>
@@ -206,10 +221,10 @@ export default function PublisherOffersPage() {
               </tr>
             ))}
             {data.length === 0 && !loading && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No offer data for this period</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No offer data for this period</td></tr>
             )}
             {loading && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
             )}
           </tbody>
         </table>
