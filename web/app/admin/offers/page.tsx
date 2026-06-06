@@ -85,9 +85,14 @@ export default function OffersPage() {
     await loadOffers()
   }
 
-  const mmpBadge = (s: string) => (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${s === 'APPSFLYER' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>{s}</span>
-  )
+  const mmpBadge = (s: string) => {
+    const styles: Record<string, string> = {
+      APPSFLYER: 'bg-blue-100 text-blue-700',
+      ADJUST: 'bg-purple-100 text-purple-700',
+      CITYADS: 'bg-orange-100 text-orange-700',
+    }
+    return <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles[s] ?? 'bg-gray-100 text-gray-600'}`}>{s}</span>
+  }
 
   const totalCommission = summary.reduce((s, d) => s + d.commissionPaid, 0)
   const totalRevenue = summary.reduce((s, d) => s + d.totalRevenue, 0)
@@ -249,7 +254,11 @@ export default function OffersPage() {
               {[
                 { label: 'Offer Name', key: 'name', placeholder: 'e.g. Shopee App VN' },
                 { label: 'App Name', key: 'appName', placeholder: 'e.g. Shopee' },
-                { label: 'App ID / App Token', key: 'appId', placeholder: 'com.example.app' },
+                {
+                  label: form.mmpSource === 'CITYADS' ? 'CityAds Offer ID' : 'App ID / App Token',
+                  key: 'appId',
+                  placeholder: form.mmpSource === 'CITYADS' ? 'e.g. 12345' : 'com.example.app',
+                },
               ].map((f) => (
                 <div key={f.key}>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
@@ -273,6 +282,7 @@ export default function OffersPage() {
                   >
                     <option value="APPSFLYER">AppsFlyer</option>
                     <option value="ADJUST">Adjust</option>
+                    <option value="CITYADS">CityAds</option>
                   </select>
                 </div>
                 <div>

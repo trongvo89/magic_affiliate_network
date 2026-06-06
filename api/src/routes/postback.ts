@@ -26,6 +26,18 @@ interface AdjustQuery {
   [key: string]: string | undefined
 }
 
+interface CityAdsQuery {
+  xid?: string
+  offer_id?: string
+  action_type?: string
+  order_total?: string
+  order_total_currency?: string
+  sa?: string
+  status?: string
+  conversion_time?: string
+  [key: string]: string | undefined
+}
+
 export default async function postbackRoutes(server: FastifyInstance) {
   const prisma: PrismaClient = (server as any).prisma
 
@@ -138,6 +150,66 @@ export default async function postbackRoutes(server: FastifyInstance) {
     return { ok: true }
   }
 
+  async function handleCityAds(query: CityAdsQuery, rawPayload: Record<string, unknown>) {
+    const sourceRefId = query.xid
+    const appId = query.offer_id
+    const publisherId = query.sa
+    const eventType = query.action_type || 'conversion'
+    const revenue = parseFloat(query.order_total || '0') || 0
+    const currency = query.order_total_currency || 'USD'
+    const eventAt = query.conversion_time ? new Date(query.conversion_time) : new Date()
+
+    if (!sourceRefId) return { ok: true, reason: 'missing xid' }
+
+    const offer = await prisma.offer.findFirst({ where: { appId, mmpSource: MmpSource.CITYADS, status: 'ACTIVE' } })
+    if (!offer) return { ok: true, reason: 'offer not found' }
+
+    const publisher = publisherId ? await prisma.user.findUnique({ where: { id: publisherId } }) : null
+
+    const commissionAmount = calculateCommission(offer.commissionType as CommType, offer.commissionValue, revenue)
+
+    const status = determineCityAdsStatus({
+      publisherId,
+      publisher,
+      cityAdsStatus: query.status,
+      commissionType: offer.commissionType as CommType,
+      revenue,
+    })
+
+    try {
+      const conversion = await prisma.conversion.create({
+        data: {
+          sourceType: MmpSource.CITYADS,
+          sourceRefId,
+          offerId: offer.id,
+          publisherId: publisher?.id ?? null,
+          eventType,
+          revenue,
+          commissionAmount,
+          currency,
+          status,
+          rawPayload: rawPayload as any,
+          eventAt,
+        },
+      })
+
+      if (status === 'APPROVED' && publisher?.postbackUrl) {
+        setImmediate(() => sendOutboundPostback(prisma, conversion.id, publisher.postbackUrl!, {
+          click_id: publisher.id,
+          payout: String(commissionAmount),
+          event: eventType,
+          order_id: sourceRefId,
+          status: 'approved',
+        }))
+      }
+    } catch (err: any) {
+      if (err.code === 'P2002') return { ok: true, reason: 'duplicate' }
+      throw err
+    }
+
+    return { ok: true }
+  }
+
   const handler = async (request: FastifyRequest<{ Params: { source: string } }>) => {
     const source = request.params.source.toLowerCase()
     const query = request.query as Record<string, string>
@@ -149,6 +221,8 @@ export default async function postbackRoutes(server: FastifyInstance) {
         await handleAppsFlyer(query as AppsflyerQuery, rawPayload)
       } else if (source === 'adjust') {
         await handleAdjust(query as AdjustQuery, rawPayload)
+      } else if (source === 'cityads') {
+        await handleCityAds(query as CityAdsQuery, rawPayload)
       }
     } catch (err) {
       request.log.error(err, 'postback error')
@@ -184,4 +258,25 @@ function determineStatus({
   // PERCENT_REVENUE but revenue = 0 → commission would be $0, data incomplete
   if (commissionType === CommType.PERCENT_REVENUE && revenue === 0) return 'PENDING'
   return 'APPROVED'
+}
+
+function determineCityAdsStatus({
+  publisherId,
+  publisher,
+  cityAdsStatus,
+  commissionType,
+  revenue,
+}: {
+  publisherId: string | undefined
+  publisher: { id: string } | null
+  cityAdsStatus: string | undefined
+  commissionType: CommType
+  revenue: number
+}): 'APPROVED' | 'PENDING' | 'REJECTED' {
+  if (!publisherId || (publisherId && !publisher)) return 'PENDING'
+  if (commissionType === CommType.PERCENT_REVENUE && revenue === 0) return 'PENDING'
+  const s = (cityAdsStatus || '').toLowerCase()
+  if (s === 'rejected' || s === 'declined') return 'REJECTED'
+  if (s === 'approved') return 'APPROVED'
+  return 'PENDING'
 }

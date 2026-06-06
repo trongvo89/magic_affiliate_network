@@ -47,6 +47,7 @@ model Offer {
 enum MmpSource {
   APPSFLYER
   ADJUST
+  CITYADS
 }
 
 enum CommType {

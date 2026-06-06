@@ -35,9 +35,14 @@ export default function PublisherOffersPage() {
 
   useEffect(() => { load() }, [load])
 
-  const mmpBadge = (s: string) => (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${s === 'APPSFLYER' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>{s}</span>
-  )
+  const mmpBadge = (s: string) => {
+    const styles: Record<string, string> = {
+      APPSFLYER: 'bg-blue-100 text-blue-700',
+      ADJUST: 'bg-purple-100 text-purple-700',
+      CITYADS: 'bg-orange-100 text-orange-700',
+    }
+    return <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles[s] ?? 'bg-gray-100 text-gray-600'}`}>{s}</span>
+  }
 
   const totalCommission = data.reduce((s, d) => s + d.commissionEarned, 0)
   const totalConversions = data.reduce((s, d) => s + d.total, 0)
