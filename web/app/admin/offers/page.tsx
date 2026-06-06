@@ -277,7 +277,14 @@ export default function OffersPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">MMP Source</label>
                   <select
                     value={form.mmpSource}
-                    onChange={(e) => setForm({ ...form, mmpSource: e.target.value })}
+                    onChange={(e) => {
+                      const src = e.target.value
+                      if (src === 'CITYADS') {
+                        setForm({ ...form, mmpSource: src, commissionType: 'PERCENT_REVENUE', commissionValue: '70' })
+                      } else {
+                        setForm({ ...form, mmpSource: src, commissionType: 'FLAT_CPA', commissionValue: '' })
+                      }
+                    }}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                   >
                     <option value="APPSFLYER">AppsFlyer</option>
@@ -289,26 +296,44 @@ export default function OffersPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Commission Type</label>
                   <select
                     value={form.commissionType}
+                    disabled={form.mmpSource === 'CITYADS'}
                     onChange={(e) => setForm({ ...form, commissionType: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:bg-gray-50 disabled:text-gray-400"
                   >
                     <option value="FLAT_CPA">Flat CPA</option>
                     <option value="PERCENT_REVENUE">% Revenue</option>
                   </select>
                 </div>
               </div>
+
+              {form.mmpSource === 'CITYADS' && (
+                <div className="bg-orange-50 border border-orange-100 rounded-lg px-4 py-3 flex items-start gap-3">
+                  <svg className="w-4 h-4 text-orange-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="text-xs text-orange-800">
+                    <p className="font-semibold mb-0.5">CityAds CPS — Tự động chia hoa hồng</p>
+                    <p>Publisher nhận <strong>70%</strong> doanh thu CityAds báo về · Magic giữ <strong>30%</strong></p>
+                    <p className="text-orange-600 mt-0.5">Có thể điều chỉnh tỷ lệ ở ô "Pub Share (%)" bên dưới nếu cần</p>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Value</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {form.mmpSource === 'CITYADS' ? 'Pub Share (%)' : 'Value'}
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
+                    max={form.mmpSource === 'CITYADS' ? '100' : undefined}
                     required
                     value={form.commissionValue}
                     onChange={(e) => setForm({ ...form, commissionValue: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    placeholder={form.commissionType === 'FLAT_CPA' ? '2.00' : '8'}
+                    placeholder={form.mmpSource === 'CITYADS' ? '70' : form.commissionType === 'FLAT_CPA' ? '2.00' : '8'}
                   />
                 </div>
                 <div>
@@ -348,7 +373,7 @@ export default function OffersPage() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white py-2 rounded-lg text-sm font-medium transition-colors"
                 >
                   {saving ? 'Creating...' : 'Create Offer'}
                 </button>
