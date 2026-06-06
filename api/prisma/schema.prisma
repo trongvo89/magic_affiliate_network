@@ -8,16 +8,18 @@ datasource db {
 }
 
 model User {
-  id          String       @id @default(cuid())
-  email       String       @unique
-  password    String
-  name        String
-  role        Role         @default(PUBLISHER)
-  status      Status       @default(PENDING)
-  postbackUrl String?
-  createdAt   DateTime     @default(now())
-  conversions Conversion[]
-  clicks      Click[]
+  id           String       @id @default(cuid())
+  email        String       @unique
+  password     String
+  name         String
+  role         Role         @default(PUBLISHER)
+  status       Status       @default(PENDING)
+  postbackUrl  String?
+  resetToken   String?      @unique
+  resetTokenAt DateTime?
+  createdAt    DateTime     @default(now())
+  conversions  Conversion[]
+  clicks       Click[]
 }
 
 enum Role {

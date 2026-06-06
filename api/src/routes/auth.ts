@@ -1,6 +1,8 @@
 import { FastifyInstance } from 'fastify'
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import { randomBytes } from 'crypto'
+import { sendPasswordResetEmail, isMailConfigured } from '../lib/mailer'
 
 export default async function authRoutes(server: FastifyInstance) {
   const prisma: PrismaClient = (server as any).prisma
@@ -62,5 +64,51 @@ export default async function authRoutes(server: FastifyInstance) {
     })
 
     return reply.code(201).send({ message: 'Registration successful. Wait for admin approval.', userId: user.id })
+  })
+
+  server.post<{ Body: { email: string } }>('/forgot-password', async (request, reply) => {
+    const { email } = request.body
+    if (!email) return reply.code(400).send({ error: 'Email required' })
+    if (!isMailConfigured()) return reply.code(503).send({ error: 'Email not configured. Contact your admin.' })
+
+    // Always respond OK so we don't reveal whether an email is registered
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } })
+    if (!user) return { ok: true }
+
+    const token = randomBytes(32).toString('hex')
+    const expiry = new Date(Date.now() + 60 * 60 * 1000) // 1 hour
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { resetToken: token, resetTokenAt: expiry },
+    })
+
+    const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '')
+    try {
+      await sendPasswordResetEmail(user.email, `${appUrl}/reset-password?token=${token}`)
+    } catch (err) {
+      server.log.error(err, 'Failed to send password reset email')
+      return reply.code(503).send({ error: 'Failed to send email. Please try again later.' })
+    }
+
+    return { ok: true }
+  })
+
+  server.post<{ Body: { token: string; password: string } }>('/reset-password', async (request, reply) => {
+    const { token, password } = request.body
+    if (!token || !password) return reply.code(400).send({ error: 'Token and password required' })
+    if (password.length < 8) return reply.code(400).send({ error: 'Password must be at least 8 characters' })
+
+    const user = await prisma.user.findFirst({
+      where: { resetToken: token, resetTokenAt: { gt: new Date() } },
+    })
+    if (!user) return reply.code(400).send({ error: 'Invalid or expired reset link. Please request a new one.' })
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { password: await bcrypt.hash(password, 12), resetToken: null, resetTokenAt: null },
+    })
+
+    return { ok: true }
   })
 }

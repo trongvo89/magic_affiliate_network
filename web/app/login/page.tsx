@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { api } from '@/lib/api'
 import { LogoMark } from '@/components/LogoMark'
 
@@ -127,6 +128,14 @@ export default function LoginPage() {
                 {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Account'}
               </button>
             </form>
+
+            {mode === 'login' && (
+              <p className="text-center mt-4 text-sm text-slate-400">
+                <Link href="/forgot-password" className="text-orange-500 hover:text-orange-600 font-medium">
+                  Forgot your password?
+                </Link>
+              </p>
+            )}
           </div>
         </div>
       </div>
