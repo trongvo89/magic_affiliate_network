@@ -115,7 +115,7 @@ export default function PublisherOffersPage() {
       {cityAdsOffers.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
           <div className="p-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900">CityAds Tracking Links</h2>
+            <h2 className="font-semibold text-gray-900">Tracking Links</h2>
             <p className="text-xs text-gray-400 mt-0.5">Copy your unique link for each offer and use it to drive traffic</p>
           </div>
           <table className="w-full text-sm">
