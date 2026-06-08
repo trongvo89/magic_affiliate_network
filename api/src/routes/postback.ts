@@ -164,7 +164,9 @@ export default async function postbackRoutes(server: FastifyInstance) {
     // payout = commission CityAds pays Magic for this conversion (not the order/GMV total)
     const revenue = parseFloat(query.payout || '0') || 0
     const currency = query.payout_currency || query.order_total_currency || 'USD'
-    const eventAt = query.conversion_time ? new Date(query.conversion_time) : new Date()
+    const eventAt = query.conversion_time
+      ? (/^\d+$/.test(query.conversion_time) ? new Date(Number(query.conversion_time) * 1000) : new Date(query.conversion_time))
+      : new Date()
 
     if (!sourceRefId) return { ok: true, reason: 'missing xid' }
 
@@ -285,7 +287,7 @@ function determineCityAdsStatus({
   if (!publisherId || (publisherId && !publisher)) return 'PENDING'
   if (commissionType === CommType.PERCENT_REVENUE && revenue === 0) return 'PENDING'
   const s = (cityAdsStatus || '').toLowerCase()
-  if (s === 'rejected' || s === 'declined') return 'REJECTED'
-  if (s === 'approved') return 'APPROVED'
+  if (s === '1' || s === 'approved') return 'APPROVED'
+  if (s === '3' || s === 'rejected' || s === 'declined') return 'REJECTED'
   return 'PENDING'
 }
