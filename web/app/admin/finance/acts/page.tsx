@@ -30,6 +30,8 @@ const BLANK_FORM = {
   actCode: '',
 }
 
+const BLANK_ADV = { name: '', email: '', currency: 'USD' }
+
 const ACT_STATUSES = [
   'DRAFT', 'UPLOADED', 'RECONCILED', 'APPROVED', 'LOCKED',
   'INVOICE_SENT', 'PAYMENT_PENDING', 'PAID', 'CLOSED', 'CANCELLED',
@@ -85,6 +87,11 @@ export default function ActsPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
 
+  const [showNewAdv, setShowNewAdv] = useState(false)
+  const [advForm, setAdvForm] = useState(BLANK_ADV)
+  const [savingAdv, setSavingAdv] = useState(false)
+  const [advError, setAdvError] = useState('')
+
   const limit = 20
 
   const load = useCallback(async () => {
@@ -114,6 +121,27 @@ export default function ActsPage() {
       setOffers(o.data)
     }).catch(() => {})
   }, [])
+
+  async function handleCreateAdv(e: React.FormEvent) {
+    e.preventDefault()
+    setSavingAdv(true)
+    setAdvError('')
+    try {
+      const { data } = await api.post('/admin/finance/advertisers', {
+        name: advForm.name,
+        email: advForm.email || undefined,
+        currency: advForm.currency,
+      })
+      setAdvertisers((prev) => [data, ...prev])
+      setForm((f) => ({ ...f, advertiserId: data.id }))
+      setShowNewAdv(false)
+      setAdvForm(BLANK_ADV)
+    } catch (err: any) {
+      setAdvError(err.response?.data?.error || 'Failed to create advertiser')
+    } finally {
+      setSavingAdv(false)
+    }
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -241,7 +269,14 @@ export default function ActsPage() {
 
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Advertiser <span className="text-red-500">*</span></label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium text-gray-700">Advertiser <span className="text-red-500">*</span></label>
+                  <button type="button"
+                    onClick={() => { setShowNewAdv(true); setAdvForm(BLANK_ADV); setAdvError('') }}
+                    className="text-xs text-orange-600 hover:text-orange-700 font-medium">
+                    + New Advertiser
+                  </button>
+                </div>
                 <select required value={form.advertiserId}
                   onChange={(e) => setForm({ ...form, advertiserId: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
@@ -249,6 +284,46 @@ export default function ActsPage() {
                   {advertisers.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               </div>
+
+              {/* Inline New Advertiser sub-form */}
+              {showNewAdv && (
+                <div className="border border-orange-200 bg-orange-50 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-orange-800">Create new advertiser</span>
+                    <button type="button" onClick={() => setShowNewAdv(false)} className="text-orange-400 hover:text-orange-600 text-lg leading-none">&times;</button>
+                  </div>
+                  {advError && <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1.5">{advError}</div>}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="col-span-2">
+                      <input
+                        required={showNewAdv}
+                        value={advForm.name}
+                        onChange={(e) => setAdvForm({ ...advForm, name: e.target.value })}
+                        placeholder="Advertiser name *"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white" />
+                    </div>
+                    <input
+                      type="email"
+                      value={advForm.email}
+                      onChange={(e) => setAdvForm({ ...advForm, email: e.target.value })}
+                      placeholder="Email (optional)"
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white" />
+                    <input
+                      value={advForm.currency}
+                      onChange={(e) => setAdvForm({ ...advForm, currency: e.target.value.toUpperCase() })}
+                      placeholder="Currency"
+                      maxLength={3}
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white" />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={savingAdv || !advForm.name}
+                    onClick={handleCreateAdv as any}
+                    className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-medium py-2 rounded-lg text-xs">
+                    {savingAdv ? 'Creating...' : 'Create & Select'}
+                  </button>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Offer <span className="text-red-500">*</span></label>
                 <select required value={form.offerId}

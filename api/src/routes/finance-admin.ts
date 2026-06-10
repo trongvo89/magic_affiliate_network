@@ -61,6 +61,31 @@ export default async function financeAdminRoutes(server: FastifyInstance) {
     }
   )
 
+  server.patch<{ Params: { id: string }; Body: { name?: string; email?: string; currency?: string } }>(
+    '/admin/finance/advertisers/:id',
+    async (request, reply) => {
+      const { name, email, currency } = request.body
+      const advertiser = await prisma.advertiser.update({
+        where: { id: request.params.id },
+        data: {
+          ...(name !== undefined && { name }),
+          ...(email !== undefined && { email }),
+          ...(currency !== undefined && { currency }),
+        },
+      }).catch(() => null)
+      if (!advertiser) return reply.code(404).send({ error: 'Not found' })
+      return advertiser
+    }
+  )
+
+  server.delete<{ Params: { id: string } }>(
+    '/admin/finance/advertisers/:id',
+    async (request, reply) => {
+      await prisma.advertiser.delete({ where: { id: request.params.id } }).catch(() => null)
+      return reply.code(204).send()
+    }
+  )
+
   // ─── Settlement Acts ──────────────────────────────────────────────────────────
 
   server.get<{ Querystring: { page?: string; limit?: string; status?: string } }>(

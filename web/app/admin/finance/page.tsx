@@ -140,6 +140,7 @@ export default function FinanceDashboardPage() {
   ]
 
   const subPages = [
+    { href: '/admin/finance/advertisers', label: 'Advertisers', description: 'Manage advertiser accounts and billing info' },
     { href: '/admin/finance/acts', label: 'Settlement Acts', description: 'Manage advertiser settlement acts and CSV reconciliation' },
     { href: '/admin/finance/invoices', label: 'Invoices', description: 'Track advertiser invoices and payment records' },
     { href: '/admin/finance/payables', label: 'Publisher Payables', description: 'View publisher balance and available amounts' },
@@ -169,7 +170,7 @@ export default function FinanceDashboardPage() {
 
       {/* Sub-page Links */}
       <h2 className="text-base font-semibold text-gray-700 mb-3">Finance Modules</h2>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         {subPages.map((page) => (
           <Link key={page.href} href={page.href}
             className="bg-white rounded-xl border border-gray-200 p-5 hover:border-orange-300 hover:shadow-sm transition-all group">
