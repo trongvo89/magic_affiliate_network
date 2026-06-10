@@ -116,7 +116,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-3 gap-4 mb-6">
           {[
             { label: 'Clicks', value: stats.range.clicks, format: false, color: 'text-gray-900' },
-            { label: 'Conversions', value: stats.range.approvedConversions, format: false, color: 'text-gray-900' },
+            { label: 'Conversions', value: stats.range.conversions, format: false, color: 'text-gray-900' },
             { label: 'CVR', value: stats.range.clicks > 0 ? `${stats.cvr}%` : '—', format: false, color: stats.cvr > 0 ? 'text-blue-600' : 'text-gray-400' },
             { label: 'EPC', value: stats.range.clicks > 0 ? `$${stats.epc}` : '—', format: false, color: stats.epc > 0 ? 'text-indigo-600' : 'text-gray-400' },
             { label: 'Earned (range)', value: stats.range.approvedEarned, format: true, color: 'text-green-600' },
