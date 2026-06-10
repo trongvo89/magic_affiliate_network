@@ -182,9 +182,14 @@ export default async function financeAdminRoutes(server: FastifyInstance) {
       const now = new Date()
       let updateData: any = {}
 
-      if (action === 'approve') {
-        if (act.status !== 'RECONCILED') {
-          return reply.code(409).send({ error: 'Act must be in RECONCILED status to approve' })
+      if (action === 'reconcile') {
+        if (act.status !== 'UPLOADED') {
+          return reply.code(409).send({ error: 'Act must be in UPLOADED status to mark as reconciled' })
+        }
+        updateData = { status: 'RECONCILED' }
+      } else if (action === 'approve') {
+        if (!['UPLOADED', 'RECONCILED'].includes(act.status)) {
+          return reply.code(409).send({ error: 'Act must be in UPLOADED or RECONCILED status to approve' })
         }
         const approvedOrderCount = await prisma.actOrder.count({
           where: { actId: id, finalStatus: 'APPROVED' },
@@ -436,7 +441,10 @@ export default async function financeAdminRoutes(server: FastifyInstance) {
 
     const act = await prisma.settlementAct.findUnique({ where: { id }, include: { advertiser: true } })
     if (!act) return reply.code(404).send({ error: 'Act not found' })
-    if (act.status !== 'LOCKED') return reply.code(409).send({ error: 'Act must be LOCKED to create invoice' })
+    const invoicableStatuses = ['APPROVED', 'LOCKED', 'INVOICE_SENT', 'PAYMENT_PENDING', 'PAID']
+    if (!invoicableStatuses.includes(act.status)) {
+      return reply.code(409).send({ error: 'Act must be APPROVED or LOCKED to create invoice' })
+    }
 
     if (!invoiceDate || amount == null) {
       return reply.code(400).send({ error: 'invoiceDate and amount are required' })

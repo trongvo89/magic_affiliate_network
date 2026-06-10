@@ -370,7 +370,7 @@ export default function ActDetailPage() {
               <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} disabled={uploadLoading} />
             </label>
           )}
-          {act.status === 'RECONCILED' && (
+          {['UPLOADED', 'RECONCILED'].includes(act.status) && (
             <button onClick={() => doAction('approve')} disabled={actionLoading}
               className="text-sm bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg font-medium">
               {actionLoading ? 'Processing...' : 'Approve Act'}
@@ -382,7 +382,7 @@ export default function ActDetailPage() {
               {actionLoading ? 'Processing...' : 'Lock Act'}
             </button>
           )}
-          {act.status === 'LOCKED' && !act.invoice && (
+          {['APPROVED', 'LOCKED'].includes(act.status) && !act.invoice && (
             <button onClick={() => { setShowInvoiceModal(true); setInvoiceForm({ ...BLANK_INVOICE, currency: act.currency, amount: String(act.totalRevenue || '') }); setInvoiceError('') }}
               className="text-sm bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg font-medium">
               Create Invoice

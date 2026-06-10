@@ -15,12 +15,29 @@ interface Invoice {
   advertiser: { id: string; name: string }
 }
 
+interface Act {
+  id: string
+  actCode: string
+  currency: string
+  totalRevenue: number
+  advertiser: { name: string }
+  invoice: null | { id: string }
+}
+
 const BLANK_PAYMENT = {
   amount: '',
   currency: '',
   paymentDate: '',
   paymentMethod: '',
   transactionReference: '',
+  notes: '',
+}
+
+const BLANK_INVOICE_FORM = {
+  actId: '',
+  invoiceDate: '',
+  dueDate: '',
+  amount: '',
   notes: '',
 }
 
@@ -57,6 +74,13 @@ export default function InvoicesPage() {
   // Mark sent
   const [markingId, setMarkingId] = useState<string | null>(null)
 
+  // Create invoice
+  const [showCreate, setShowCreate] = useState(false)
+  const [invoiceForm, setInvoiceForm] = useState(BLANK_INVOICE_FORM)
+  const [invoiceSaving, setInvoiceSaving] = useState(false)
+  const [invoiceError, setInvoiceError] = useState('')
+  const [eligibleActs, setEligibleActs] = useState<Act[]>([])
+
   const limit = 20
 
   const load = useCallback(async () => {
@@ -75,6 +99,51 @@ export default function InvoicesPage() {
   }, [page])
 
   useEffect(() => { load() }, [load])
+
+  async function openCreateInvoice() {
+    setInvoiceForm(BLANK_INVOICE_FORM)
+    setInvoiceError('')
+    setShowCreate(true)
+    try {
+      const { data } = await api.get('/admin/finance/acts?limit=100')
+      const acts = (data.acts || data) as Act[]
+      setEligibleActs(acts.filter((a: any) =>
+        ['APPROVED', 'LOCKED', 'INVOICE_SENT', 'PAYMENT_PENDING', 'PAID'].includes(a.status) && !a.invoice
+      ))
+    } catch {
+      setEligibleActs([])
+    }
+  }
+
+  function handleActSelect(actId: string) {
+    const act = eligibleActs.find((a) => a.id === actId)
+    setInvoiceForm((f) => ({
+      ...f,
+      actId,
+      amount: act ? String(act.totalRevenue || '') : '',
+    }))
+  }
+
+  async function handleCreateInvoice(e: React.FormEvent) {
+    e.preventDefault()
+    if (!invoiceForm.actId) return setInvoiceError('Please select an act')
+    setInvoiceSaving(true)
+    setInvoiceError('')
+    try {
+      await api.post(`/admin/finance/acts/${invoiceForm.actId}/invoice`, {
+        invoiceDate: invoiceForm.invoiceDate,
+        dueDate: invoiceForm.dueDate || undefined,
+        amount: parseFloat(invoiceForm.amount),
+        notes: invoiceForm.notes || undefined,
+      })
+      setShowCreate(false)
+      load()
+    } catch (err: any) {
+      setInvoiceError(err.response?.data?.error || 'Failed to create invoice')
+    } finally {
+      setInvoiceSaving(false)
+    }
+  }
 
   async function markSent(invoice: Invoice) {
     setMarkingId(invoice.id)
@@ -122,6 +191,11 @@ export default function InvoicesPage() {
           <h1 className="text-xl font-bold text-gray-900">Advertiser Invoices</h1>
           <p className="text-sm text-gray-500 mt-0.5">Track invoices and payment records</p>
         </div>
+        <button
+          onClick={openCreateInvoice}
+          className="text-sm bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium">
+          + Create Invoice
+        </button>
       </div>
 
       {error && (
@@ -206,6 +280,74 @@ export default function InvoicesPage() {
           </div>
         )}
       </div>
+
+      {/* Create Invoice Modal */}
+      {showCreate && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowCreate(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-gray-900">Create Invoice</h2>
+              <button onClick={() => setShowCreate(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+            </div>
+
+            {invoiceError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700">{invoiceError}</div>
+            )}
+
+            <form onSubmit={handleCreateInvoice} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Settlement Act <span className="text-red-500">*</span></label>
+                <select required value={invoiceForm.actId}
+                  onChange={(e) => handleActSelect(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+                  <option value="">Select act...</option>
+                  {eligibleActs.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.actCode} — {a.advertiser?.name}
+                    </option>
+                  ))}
+                </select>
+                {eligibleActs.length === 0 && (
+                  <p className="text-xs text-gray-400 mt-1">No eligible acts found. Acts must be APPROVED or LOCKED and not yet invoiced.</p>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Date <span className="text-red-500">*</span></label>
+                  <input required type="date" value={invoiceForm.invoiceDate}
+                    onChange={(e) => setInvoiceForm({ ...invoiceForm, invoiceDate: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+                  <input type="date" value={invoiceForm.dueDate}
+                    onChange={(e) => setInvoiceForm({ ...invoiceForm, dueDate: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount <span className="text-red-500">*</span></label>
+                <input required type="number" step="0.01" min="0" value={invoiceForm.amount}
+                  onChange={(e) => setInvoiceForm({ ...invoiceForm, amount: e.target.value })}
+                  placeholder="0.00"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                <p className="text-xs text-gray-400 mt-1">Auto-filled from act revenue. Adjust if needed.</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea value={invoiceForm.notes} rows={2}
+                  onChange={(e) => setInvoiceForm({ ...invoiceForm, notes: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+              </div>
+              <button type="submit" disabled={invoiceSaving}
+                className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm">
+                {invoiceSaving ? 'Creating...' : 'Create Invoice'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Record Payment Modal */}
       {paymentTarget && (
