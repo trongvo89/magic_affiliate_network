@@ -18,8 +18,12 @@ model User {
   resetToken   String?      @unique
   resetTokenAt DateTime?
   createdAt    DateTime     @default(now())
-  conversions  Conversion[]
-  clicks       Click[]
+
+  conversions      Conversion[]
+  clicks           Click[]
+  actOrders        ActOrder[]
+  publisherBalance PublisherBalance?
+  paymentRequests  PublisherPaymentRequest[]
 }
 
 enum Role {
@@ -33,21 +37,38 @@ enum Status {
   SUSPENDED
 }
 
+model Advertiser {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  currency  String   @default("USD")
+  createdAt DateTime @default(now())
+
+  offers         Offer[]
+  settlementActs SettlementAct[]
+  invoices       AdvertiserInvoice[]
+  payments       AdvertiserPayment[]
+}
+
 model Offer {
-  id              String       @id @default(cuid())
-  name            String
-  appName         String
-  appId           String       @unique
-  mmpSource       MmpSource
-  commissionType  CommType     @default(FLAT_CPA)
-  commissionValue Float
-  currency        String       @default("USD")
-  status               OfferStatus  @default(ACTIVE)
+  id                   String      @id @default(cuid())
+  name                 String
+  appName              String
+  appId                String      @unique
+  mmpSource            MmpSource
+  commissionType       CommType    @default(FLAT_CPA)
+  commissionValue      Float
+  currency             String      @default("USD")
+  status               OfferStatus @default(ACTIVE)
   destinationUrl       String?
   pubCommissionDisplay String?
-  createdAt            DateTime     @default(now())
-  conversions     Conversion[]
-  clicks          Click[]
+  advertiserId         String?
+  advertiser           Advertiser? @relation(fields: [advertiserId], references: [id])
+  createdAt            DateTime    @default(now())
+
+  conversions    Conversion[]
+  clicks         Click[]
+  settlementActs SettlementAct[]
 }
 
 enum MmpSource {
@@ -86,6 +107,8 @@ model Conversion {
   receivedAt       DateTime   @default(now())
   eventAt          DateTime
 
+  actOrder ActOrder?
+
   @@unique([sourceType, sourceRefId])
   @@index([publisherId, eventAt(sort: Desc)])
   @@index([offerId, status])
@@ -109,4 +132,234 @@ model Click {
 
   @@index([offerId, clickedAt(sort: Desc)])
   @@index([publisherId, clickedAt(sort: Desc)])
+}
+
+// ─── Finance Module ───────────────────────────────────────────────────────────
+
+model SettlementAct {
+  id                     String           @id @default(cuid())
+  actCode                String           @unique
+  advertiserId           String
+  advertiser             Advertiser       @relation(fields: [advertiserId], references: [id])
+  offerId                String
+  offer                  Offer            @relation(fields: [offerId], references: [id])
+  periodStart            DateTime
+  periodEnd              DateTime
+  currency               String           @default("USD")
+  status                 ActStatus        @default(DRAFT)
+  totalRevenue           Float            @default(0)
+  totalPayout            Float            @default(0)
+  grossMargin            Float            @default(0)
+  uploadedFileUrl        String?
+  advertiserPaymentStatus AdvPayStatus    @default(UNPAID)
+  publisherReleaseStatus PubReleaseStatus @default(LOCKED)
+  createdBy              String
+  lockedAt               DateTime?
+  closedAt               DateTime?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  orders  ActOrder[]
+  invoice AdvertiserInvoice?
+
+  @@index([advertiserId])
+  @@index([offerId])
+  @@index([status])
+}
+
+enum ActStatus {
+  DRAFT
+  UPLOADED
+  RECONCILED
+  APPROVED
+  LOCKED
+  INVOICE_SENT
+  PAYMENT_PENDING
+  PAID
+  CLOSED
+  CANCELLED
+}
+
+enum AdvPayStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum PubReleaseStatus {
+  LOCKED
+  RELEASED
+}
+
+model ActOrder {
+  id               String            @id @default(cuid())
+  actId            String
+  act              SettlementAct     @relation(fields: [actId], references: [id])
+  conversionId     String?           @unique
+  conversion       Conversion?       @relation(fields: [conversionId], references: [id])
+  orderId          String
+  publisherId      String?
+  publisher        User?             @relation(fields: [publisherId], references: [id])
+  offerId          String
+  trackingStatus   ConvStatus?
+  advertiserStatus String?
+  finalStatus      ActOrderStatus    @default(PENDING)
+  paymentStatus    ActOrderPayStatus @default(UNPAID)
+  revenue          Float             @default(0)
+  payout           Float             @default(0)
+  margin           Float             @default(0)
+  currency         String            @default("USD")
+  rejectReason     String?
+  sourceFileRow    Int?
+  approvedAt       DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  paymentItems PublisherPaymentItem[]
+
+  @@index([actId])
+  @@index([publisherId, paymentStatus])
+  @@index([orderId])
+}
+
+enum ActOrderStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  HOLD
+}
+
+enum ActOrderPayStatus {
+  UNPAID
+  NOT_PAYABLE_YET
+  PAYABLE
+  REQUESTED
+  PROCESSING
+  PAID
+  HOLD
+}
+
+model AdvertiserInvoice {
+  id            String        @id @default(cuid())
+  actId         String        @unique
+  act           SettlementAct @relation(fields: [actId], references: [id])
+  advertiserId  String
+  advertiser    Advertiser    @relation(fields: [advertiserId], references: [id])
+  invoiceNumber String        @unique
+  invoiceDate   DateTime
+  dueDate       DateTime?
+  amount        Float
+  currency      String
+  status        InvoiceStatus @default(DRAFT)
+  fileUrl       String?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  payments AdvertiserPayment[]
+
+  @@index([advertiserId])
+  @@index([status])
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  WAITING_PAYMENT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  OVERDUE
+  DISPUTED
+  CANCELLED
+}
+
+model AdvertiserPayment {
+  id                   String            @id @default(cuid())
+  invoiceId            String
+  invoice              AdvertiserInvoice @relation(fields: [invoiceId], references: [id])
+  advertiserId         String
+  advertiser           Advertiser        @relation(fields: [advertiserId], references: [id])
+  amount               Float
+  currency             String
+  paymentDate          DateTime
+  paymentMethod        String?
+  transactionReference String?
+  proofFileUrl         String?
+  notes                String?
+  createdBy            String
+  createdAt            DateTime          @default(now())
+
+  @@index([invoiceId])
+}
+
+model PublisherBalance {
+  id              String   @id @default(cuid())
+  publisherId     String   @unique
+  publisher       User     @relation(fields: [publisherId], references: [id])
+  currency        String   @default("USD")
+  pendingAmount   Float    @default(0)
+  approvedAmount  Float    @default(0)
+  availableAmount Float    @default(0)
+  requestedAmount Float    @default(0)
+  paidAmount      Float    @default(0)
+  holdAmount      Float    @default(0)
+  updatedAt       DateTime @updatedAt
+}
+
+model PublisherPaymentRequest {
+  id              String       @id @default(cuid())
+  requestCode     String       @unique
+  publisherId     String
+  publisher       User         @relation(fields: [publisherId], references: [id])
+  amount          Float
+  currency        String
+  status          PayReqStatus @default(REQUESTED)
+  paymentMethod   String?
+  bankInfo        String?
+  invoiceFileUrl  String?
+  paymentProofUrl String?
+  statementUrl    String?
+  adminNote       String?
+  publisherNote   String?
+  requestedAt     DateTime     @default(now())
+  approvedAt      DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  items PublisherPaymentItem[]
+
+  @@index([publisherId, status])
+}
+
+enum PayReqStatus {
+  REQUESTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  PROCESSING
+  PAID
+  CANCELLED
+}
+
+model PublisherPaymentItem {
+  id               String                  @id @default(cuid())
+  paymentRequestId String
+  paymentRequest   PublisherPaymentRequest @relation(fields: [paymentRequestId], references: [id])
+  actOrderId       String
+  actOrder         ActOrder                @relation(fields: [actOrderId], references: [id])
+  publisherId      String
+  payout           Float
+  currency         String
+  status           PayItemStatus           @default(INCLUDED)
+  createdAt        DateTime                @default(now())
+
+  @@index([paymentRequestId])
+  @@index([actOrderId])
+}
+
+enum PayItemStatus {
+  INCLUDED
+  PAID
+  CANCELLED
 }

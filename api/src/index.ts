@@ -1,6 +1,7 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
+import multipart from '@fastify/multipart'
 import { PrismaClient } from '@prisma/client'
 import dotenv from 'dotenv'
 
@@ -9,6 +10,8 @@ import authRoutes from './routes/auth'
 import adminRoutes from './routes/admin'
 import publisherRoutes from './routes/publisher'
 import clickRoutes from './routes/click'
+import financeAdminRoutes from './routes/finance-admin'
+import financePublisherRoutes from './routes/finance-publisher'
 
 dotenv.config()
 
@@ -39,6 +42,8 @@ async function start() {
     console.warn('WARNING: CORS_ORIGIN is not set or is wildcard in production — restricting CORS')
   }
 
+  await server.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } })
+
   await server.register(cors, {
     origin: corsOrigin || (process.env.NODE_ENV !== 'production' ? true : false),
     credentials: true,
@@ -56,6 +61,8 @@ async function start() {
   await server.register(adminRoutes, { prefix: '/admin' })
   await server.register(publisherRoutes, { prefix: '/publisher' })
   await server.register(clickRoutes, { prefix: '/click' })
+  await server.register(financeAdminRoutes)
+  await server.register(financePublisherRoutes)
 
   server.get('/health', async () => ({ status: 'ok', ts: new Date().toISOString() }))
 
