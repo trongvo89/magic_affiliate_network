@@ -3,8 +3,18 @@ import { useEffect, useState, useCallback } from 'react'
 import { api, fmtMoney, fmtDate } from '@/lib/api'
 
 interface Stats {
-  range: { conversions: number; clicks: number; earned: number; approvedConversions: number; approvedEarned: number }
+  range: {
+    conversions: number
+    clicks: number
+    earned: number
+    earnedByCurrency: Record<string, number>
+    approvedConversions: number
+    approvedEarned: number
+    approvedEarnedByCurrency: Record<string, number>
+  }
   totalApproved: number
+  totalApprovedByCurrency: Record<string, number>
+  primaryCurrency: string
   cvr: number
   epc: number
 }
@@ -114,19 +124,41 @@ export default function DashboardPage() {
 
       {stats && (
         <div className="grid grid-cols-3 gap-4 mb-6">
-          {[
-            { label: 'Clicks', value: stats.range.clicks, format: false, color: 'text-gray-900' },
-            { label: 'Conversions', value: stats.range.conversions, format: false, color: 'text-gray-900' },
-            { label: 'CVR', value: stats.range.clicks > 0 ? `${stats.cvr}%` : '—', format: false, color: stats.cvr > 0 ? 'text-blue-600' : 'text-gray-400' },
-            { label: 'EPC', value: stats.range.clicks > 0 ? `$${stats.epc}` : '—', format: false, color: stats.epc > 0 ? 'text-indigo-600' : 'text-gray-400' },
-            { label: 'Earned (range)', value: stats.range.approvedEarned, format: true, color: 'text-green-600' },
-            { label: 'Total Approved (all time)', value: stats.totalApproved, format: true, color: 'text-green-700' },
-          ].map((card) => (
-            <div key={card.label} className="bg-white rounded-xl p-5 border border-gray-200">
-              <div className="text-xs text-gray-500 mb-1">{card.label}</div>
-              <div className={`text-2xl font-bold ${card.color}`}>
-                {card.format ? fmtMoney(card.value as number) : card.value}
-              </div>
+          <div className="bg-white rounded-xl p-5 border border-gray-200">
+            <div className="text-xs text-gray-500 mb-1">Clicks</div>
+            <div className="text-2xl font-bold text-gray-900">{stats.range.clicks}</div>
+          </div>
+          <div className="bg-white rounded-xl p-5 border border-gray-200">
+            <div className="text-xs text-gray-500 mb-1">Conversions</div>
+            <div className="text-2xl font-bold text-gray-900">{stats.range.conversions}</div>
+          </div>
+          <div className="bg-white rounded-xl p-5 border border-gray-200">
+            <div className="text-xs text-gray-500 mb-1">CVR</div>
+            <div className={`text-2xl font-bold ${stats.cvr > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+              {stats.range.clicks > 0 ? `${stats.cvr}%` : '—'}
+            </div>
+          </div>
+
+          {/* Earned per currency */}
+          {Object.entries(stats.range.approvedEarnedByCurrency).length === 0 ? (
+            <div className="bg-white rounded-xl p-5 border border-gray-200">
+              <div className="text-xs text-gray-500 mb-1">Earned (range)</div>
+              <div className="text-2xl font-bold text-green-600">{fmtMoney(0)}</div>
+            </div>
+          ) : Object.entries(stats.range.approvedEarnedByCurrency).map(([cur, amt]) => (
+            <div key={cur} className="bg-white rounded-xl p-5 border border-gray-200">
+              <div className="text-xs text-gray-500 mb-1">Earned <span className="font-semibold text-gray-700">({cur})</span></div>
+              <div className="text-2xl font-bold text-green-600">{fmtMoney(amt, cur)}</div>
+              <div className="text-xs text-gray-400 mt-0.5">range period</div>
+            </div>
+          ))}
+
+          {/* Total approved per currency */}
+          {Object.entries(stats.totalApprovedByCurrency).map(([cur, amt]) => (
+            <div key={`total-${cur}`} className="bg-white rounded-xl p-5 border border-gray-200">
+              <div className="text-xs text-gray-500 mb-1">Total Approved <span className="font-semibold text-gray-700">({cur})</span></div>
+              <div className="text-2xl font-bold text-green-700">{fmtMoney(amt, cur)}</div>
+              <div className="text-xs text-gray-400 mt-0.5">all time</div>
             </div>
           ))}
         </div>

@@ -4,15 +4,28 @@ import Link from 'next/link'
 import { api, fmtMoney } from '@/lib/api'
 
 interface DashboardData {
-  totalReceivable: number
-  totalReceived: number
-  totalPayable: number
-  totalPaid: number
+  receivableByCurrency: Record<string, number>
+  receivedByCurrency: Record<string, number>
+  payableByCurrency: Record<string, number>
+  paidByCurrency: Record<string, number>
   pendingRequests: number
   overdueInvoices: number
   actsAwaitingReconciliation: number
   actsAwaitingPayment: number
-  currency?: string
+}
+
+function CurrencyAmounts({ map, color }: { map: Record<string, number>; color: string }) {
+  const entries = Object.entries(map)
+  if (entries.length === 0) return <span className={`text-2xl font-bold ${color}`}>{fmtMoney(0)}</span>
+  return (
+    <div className="space-y-0.5">
+      {entries.map(([cur, amt]) => (
+        <div key={cur} className={`text-xl font-bold ${color}`}>
+          {fmtMoney(amt, cur)} <span className="text-xs font-normal text-gray-400">{cur}</span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export default function FinanceDashboardPage() {
@@ -50,93 +63,11 @@ export default function FinanceDashboardPage() {
     )
   }
 
-  const currency = data?.currency || 'USD'
-
-  const cards = [
-    {
-      label: 'Total Advertiser Receivable',
-      value: fmtMoney(data?.totalReceivable ?? 0, currency),
-      color: 'bg-blue-50 text-blue-700',
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-        </svg>
-      ),
-    },
-    {
-      label: 'Total Advertiser Received',
-      value: fmtMoney(data?.totalReceived ?? 0, currency),
-      color: 'bg-green-50 text-green-700',
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      ),
-    },
-    {
-      label: 'Total Publisher Payable',
-      value: fmtMoney(data?.totalPayable ?? 0, currency),
-      color: 'bg-orange-50 text-orange-700',
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      ),
-    },
-    {
-      label: 'Total Publisher Paid',
-      value: fmtMoney(data?.totalPaid ?? 0, currency),
-      color: 'bg-green-50 text-green-700',
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-        </svg>
-      ),
-    },
-    {
-      label: 'Pending Payment Requests',
-      value: String(data?.pendingRequests ?? 0),
-      color: 'bg-yellow-50 text-yellow-700',
-      isCount: true,
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      ),
-    },
-    {
-      label: 'Overdue Invoices',
-      value: String(data?.overdueInvoices ?? 0),
-      color: 'bg-red-50 text-red-700',
-      isCount: true,
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-        </svg>
-      ),
-    },
-    {
-      label: 'Acts Awaiting Reconciliation',
-      value: String(data?.actsAwaitingReconciliation ?? 0),
-      color: 'bg-purple-50 text-purple-700',
-      isCount: true,
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-        </svg>
-      ),
-    },
-    {
-      label: 'Acts Awaiting Payment',
-      value: String(data?.actsAwaitingPayment ?? 0),
-      color: 'bg-indigo-50 text-indigo-700',
-      isCount: true,
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-        </svg>
-      ),
-    },
+  const countCards = [
+    { label: 'Pending Payment Requests', value: data?.pendingRequests ?? 0, color: 'bg-yellow-50 text-yellow-700' },
+    { label: 'Overdue Invoices', value: data?.overdueInvoices ?? 0, color: 'bg-red-50 text-red-700' },
+    { label: 'Acts Awaiting Reconciliation', value: data?.actsAwaitingReconciliation ?? 0, color: 'bg-purple-50 text-purple-700' },
+    { label: 'Acts Awaiting Payment', value: data?.actsAwaitingPayment ?? 0, color: 'bg-indigo-50 text-indigo-700' },
   ]
 
   const subPages = [
@@ -153,17 +84,32 @@ export default function FinanceDashboardPage() {
         <h1 className="text-xl font-bold text-gray-900">Finance Dashboard</h1>
       </div>
 
-      {/* Summary Cards */}
+      {/* Advertiser & Publisher Money Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-xs font-medium text-gray-500 mb-3">Advertiser Receivable</p>
+          <CurrencyAmounts map={data?.receivableByCurrency ?? {}} color="text-blue-700" />
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-xs font-medium text-gray-500 mb-3">Advertiser Received</p>
+          <CurrencyAmounts map={data?.receivedByCurrency ?? {}} color="text-green-700" />
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-xs font-medium text-gray-500 mb-3">Publisher Payable</p>
+          <CurrencyAmounts map={data?.payableByCurrency ?? {}} color="text-orange-700" />
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-xs font-medium text-gray-500 mb-3">Publisher Paid Out</p>
+          <CurrencyAmounts map={data?.paidByCurrency ?? {}} color="text-green-700" />
+        </div>
+      </div>
+
+      {/* Count Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {cards.map((card) => (
+        {countCards.map((card) => (
           <div key={card.label} className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-start justify-between mb-3">
-              <p className="text-xs font-medium text-gray-500 leading-snug">{card.label}</p>
-              <span className={`p-1.5 rounded-lg ${card.color}`}>{card.icon}</span>
-            </div>
-            <p className={`text-2xl font-bold ${card.isCount ? 'text-gray-900' : 'text-gray-900'}`}>
-              {card.value}
-            </p>
+            <p className="text-xs font-medium text-gray-500 mb-3">{card.label}</p>
+            <p className={`text-2xl font-bold text-gray-900`}>{card.value}</p>
           </div>
         ))}
       </div>

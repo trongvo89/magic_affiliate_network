@@ -34,24 +34,42 @@ export default async function publisherRoutes(server: FastifyInstance) {
 
     const dateRange = { gte: fromDate, lte: toDate }
 
-    const [rangeConv, rangeApproved, rangeClicks, totalApprovedAgg] = await Promise.all([
-      prisma.conversion.aggregate({ where: { publisherId: id, eventAt: dateRange }, _sum: { commissionAmount: true }, _count: true }),
-      prisma.conversion.aggregate({ where: { publisherId: id, status: 'APPROVED', eventAt: dateRange }, _sum: { commissionAmount: true }, _count: true }),
+    const [rangeConv, rangeApproved, rangeClicks, totalApprovedByCur] = await Promise.all([
+      prisma.conversion.groupBy({ by: ['currency'], where: { publisherId: id, eventAt: dateRange }, _sum: { commissionAmount: true }, _count: { _all: true } }),
+      prisma.conversion.groupBy({ by: ['currency'], where: { publisherId: id, status: 'APPROVED', eventAt: dateRange }, _sum: { commissionAmount: true }, _count: { _all: true } }),
       prisma.click.count({ where: { publisherId: id, clickedAt: dateRange } }),
-      prisma.conversion.aggregate({ where: { publisherId: id, status: 'APPROVED' }, _sum: { commissionAmount: true } }),
+      prisma.conversion.groupBy({ by: ['currency'], where: { publisherId: id, status: 'APPROVED' }, _sum: { commissionAmount: true }, _count: { _all: true } }),
     ])
 
-    const approvedCount = rangeApproved._count
-    const approvedEarned = rangeApproved._sum.commissionAmount ?? 0
+    const totalConversions = rangeConv.reduce((s, r) => s + r._count._all, 0)
+    const approvedCount = rangeApproved.reduce((s, r) => s + r._count._all, 0)
+
+    const earnedByCurrency: Record<string, number> = {}
+    for (const r of rangeConv) earnedByCurrency[r.currency || 'USD'] = r._sum.commissionAmount ?? 0
+
+    const approvedEarnedByCurrency: Record<string, number> = {}
+    for (const r of rangeApproved) approvedEarnedByCurrency[r.currency || 'USD'] = r._sum.commissionAmount ?? 0
+
+    const totalApprovedByCurrency: Record<string, number> = {}
+    for (const r of totalApprovedByCur) totalApprovedByCurrency[r.currency || 'USD'] = r._sum.commissionAmount ?? 0
+
+    // Primary currency = the one with the most approved earnings
+    const primaryCurrency = Object.entries(approvedEarnedByCurrency).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'USD'
+    const approvedEarned = approvedEarnedByCurrency[primaryCurrency] ?? 0
+
     return {
       range: {
-        conversions: rangeConv._count,
+        conversions: totalConversions,
         clicks: rangeClicks,
-        earned: rangeConv._sum.commissionAmount ?? 0,
+        earned: earnedByCurrency[primaryCurrency] ?? 0,
+        earnedByCurrency,
         approvedConversions: approvedCount,
         approvedEarned,
+        approvedEarnedByCurrency,
       },
-      totalApproved: totalApprovedAgg._sum.commissionAmount ?? 0,
+      totalApproved: totalApprovedByCurrency[primaryCurrency] ?? 0,
+      totalApprovedByCurrency,
+      primaryCurrency,
       cvr: rangeClicks > 0 ? parseFloat(((approvedCount / rangeClicks) * 100).toFixed(2)) : 0,
       epc: rangeClicks > 0 ? parseFloat((approvedEarned / rangeClicks).toFixed(4)) : 0,
     }

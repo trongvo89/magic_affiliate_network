@@ -28,17 +28,32 @@ export default async function adminRoutes(server: FastifyInstance) {
     const start7d = new Date(now.getTime() - 7 * 86400000)
     const start30d = new Date(now.getTime() - 30 * 86400000)
 
-    const [today, week, month, pendingPubs] = await Promise.all([
-      prisma.conversion.aggregate({ where: { receivedAt: { gte: startOfDay } }, _sum: { revenue: true, commissionAmount: true }, _count: true }),
-      prisma.conversion.aggregate({ where: { receivedAt: { gte: start7d } }, _sum: { revenue: true, commissionAmount: true }, _count: true }),
-      prisma.conversion.aggregate({ where: { receivedAt: { gte: start30d } }, _sum: { revenue: true, commissionAmount: true }, _count: true }),
+    const [todayByCur, weekByCur, monthByCur, pendingPubs] = await Promise.all([
+      prisma.conversion.groupBy({ by: ['currency'], where: { receivedAt: { gte: startOfDay } }, _sum: { revenue: true, commissionAmount: true }, _count: { _all: true } }),
+      prisma.conversion.groupBy({ by: ['currency'], where: { receivedAt: { gte: start7d } }, _sum: { revenue: true, commissionAmount: true }, _count: { _all: true } }),
+      prisma.conversion.groupBy({ by: ['currency'], where: { receivedAt: { gte: start30d } }, _sum: { revenue: true, commissionAmount: true }, _count: { _all: true } }),
       prisma.user.count({ where: { status: 'PENDING', role: 'PUBLISHER' } }),
     ])
 
+    function buildStats(rows: any[]) {
+      const byCurrency: Record<string, { conversions: number; revenue: number; commission: number }> = {}
+      let totalConversions = 0
+      for (const row of rows) {
+        const cur = row.currency || 'USD'
+        byCurrency[cur] = {
+          conversions: row._count._all,
+          revenue: row._sum.revenue ?? 0,
+          commission: row._sum.commissionAmount ?? 0,
+        }
+        totalConversions += row._count._all
+      }
+      return { conversions: totalConversions, byCurrency }
+    }
+
     return {
-      today: { conversions: today._count, revenue: today._sum.revenue ?? 0, commission: today._sum.commissionAmount ?? 0 },
-      week: { conversions: week._count, revenue: week._sum.revenue ?? 0, commission: week._sum.commissionAmount ?? 0 },
-      month: { conversions: month._count, revenue: month._sum.revenue ?? 0, commission: month._sum.commissionAmount ?? 0 },
+      today: buildStats(todayByCur),
+      week: buildStats(weekByCur),
+      month: buildStats(monthByCur),
       pendingPublishers: pendingPubs,
     }
   })

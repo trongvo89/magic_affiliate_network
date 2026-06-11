@@ -654,23 +654,25 @@ export default async function financeAdminRoutes(server: FastifyInstance) {
     const now = new Date()
 
     const [
-      receivableAgg,
-      receivedAgg,
+      receivableByCur,
+      receivedByCur,
       balances,
       pendingRequests,
       overdueInvoices,
       actsAwaitingReconciliation,
       actsAwaitingPayment,
     ] = await Promise.all([
-      prisma.advertiserInvoice.aggregate({
+      prisma.advertiserInvoice.groupBy({
+        by: ['currency'],
         where: { status: { notIn: ['RECEIVED', 'CANCELLED'] } },
         _sum: { amount: true },
       }),
-      prisma.advertiserPayment.aggregate({
+      prisma.advertiserPayment.groupBy({
+        by: ['currency'],
         _sum: { amount: true },
       }),
       prisma.publisherBalance.findMany({
-        select: { availableAmount: true, requestedAmount: true, paidAmount: true },
+        select: { currency: true, availableAmount: true, requestedAmount: true, paidAmount: true },
       }),
       prisma.publisherPaymentRequest.count({
         where: { status: { in: ['REQUESTED', 'UNDER_REVIEW'] } },
@@ -687,14 +689,26 @@ export default async function financeAdminRoutes(server: FastifyInstance) {
       }),
     ])
 
-    const totalPayable = balances.reduce((sum, b) => sum + b.availableAmount + b.requestedAmount, 0)
-    const totalPaid = balances.reduce((sum, b) => sum + b.paidAmount, 0)
+    // Build per-currency maps
+    const receivableByCurrency: Record<string, number> = {}
+    for (const r of receivableByCur) receivableByCurrency[r.currency] = r._sum.amount ?? 0
+
+    const receivedByCurrency: Record<string, number> = {}
+    for (const r of receivedByCur) receivedByCurrency[r.currency] = r._sum.amount ?? 0
+
+    const payableByCurrency: Record<string, number> = {}
+    const paidByCurrency: Record<string, number> = {}
+    for (const b of balances) {
+      const cur = b.currency || 'USD'
+      payableByCurrency[cur] = (payableByCurrency[cur] ?? 0) + b.availableAmount + b.requestedAmount
+      paidByCurrency[cur] = (paidByCurrency[cur] ?? 0) + b.paidAmount
+    }
 
     return {
-      totalReceivable: receivableAgg._sum.amount ?? 0,
-      totalReceived: receivedAgg._sum.amount ?? 0,
-      totalPayable,
-      totalPaid,
+      receivableByCurrency,
+      receivedByCurrency,
+      payableByCurrency,
+      paidByCurrency,
       pendingRequests,
       overdueInvoices,
       actsAwaitingReconciliation,

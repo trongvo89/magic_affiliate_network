@@ -2,8 +2,21 @@
 import { useEffect, useState } from 'react'
 import { api, fmtMoney, fmtDate } from '@/lib/api'
 
+interface CurrencyStats {
+  conversions: number
+  revenue: number
+  commission: number
+}
+
+interface PeriodStats {
+  conversions: number
+  byCurrency: Record<string, CurrencyStats>
+}
+
 interface Stats {
-  today: { conversions: number; revenue: number; commission: number }
+  today: PeriodStats
+  week: PeriodStats
+  month: PeriodStats
   pendingPublishers: number
 }
 
@@ -78,19 +91,37 @@ export default function AdminDashboard() {
 
       {stats && (
         <div className="grid grid-cols-4 gap-4 mb-6">
-          {[
-            { label: 'Conversions Today', value: stats.today.conversions, format: false },
-            { label: 'Revenue Today', value: stats.today.revenue, format: true },
-            { label: 'Commission Owed', value: stats.today.commission, format: true },
-            { label: 'Pending Publishers', value: stats.pendingPublishers, format: false },
-          ].map((card) => (
-            <div key={card.label} className="bg-white rounded-xl p-4 border border-gray-200">
-              <div className="text-xs text-gray-500 mb-1">{card.label}</div>
-              <div className="text-2xl font-bold text-gray-900">
-                {card.format ? fmtMoney(card.value as number) : card.value}
-              </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-200">
+            <div className="text-xs text-gray-500 mb-1">Conversions Today</div>
+            <div className="text-2xl font-bold text-gray-900">{stats.today.conversions}</div>
+          </div>
+
+          {Object.keys(stats.today.byCurrency).length === 0 ? (
+            <div className="bg-white rounded-xl p-4 border border-gray-200">
+              <div className="text-xs text-gray-500 mb-1">Revenue Today</div>
+              <div className="text-2xl font-bold text-gray-900">{fmtMoney(0)}</div>
+            </div>
+          ) : Object.entries(stats.today.byCurrency).map(([cur, s]) => (
+            <div key={cur} className="bg-white rounded-xl p-4 border border-gray-200">
+              <div className="text-xs text-gray-500 mb-1">Revenue Today <span className="font-semibold text-gray-700">({cur})</span></div>
+              <div className="text-2xl font-bold text-gray-900">{fmtMoney(s.revenue, cur)}</div>
+              <div className="text-xs text-green-600 mt-0.5">Commission: {fmtMoney(s.commission, cur)}</div>
             </div>
           ))}
+
+          {/* Month stats */}
+          {Object.entries(stats.month.byCurrency).map(([cur, s]) => (
+            <div key={`month-${cur}`} className="bg-white rounded-xl p-4 border border-gray-200">
+              <div className="text-xs text-gray-500 mb-1">Revenue 30d <span className="font-semibold text-gray-700">({cur})</span></div>
+              <div className="text-2xl font-bold text-gray-900">{fmtMoney(s.revenue, cur)}</div>
+              <div className="text-xs text-gray-500 mt-0.5">{s.conversions} conversions</div>
+            </div>
+          ))}
+
+          <div className="bg-white rounded-xl p-4 border border-gray-200">
+            <div className="text-xs text-gray-500 mb-1">Pending Publishers</div>
+            <div className="text-2xl font-bold text-gray-900">{stats.pendingPublishers}</div>
+          </div>
         </div>
       )}
 
