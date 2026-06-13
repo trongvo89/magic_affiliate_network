@@ -667,4 +667,21 @@ export default async function adminRoutes(server: FastifyInstance) {
   server.get('/publishers/pending', async () => {
     return prisma.user.findMany({ where: { status: 'PENDING', role: 'PUBLISHER' }, orderBy: { createdAt: 'asc' } })
   })
+
+  // Postback logs
+  server.get<{ Querystring: { source?: string; result?: string; limit?: string } }>(
+    '/postback-logs',
+    async (request) => {
+      const { source, result, limit = '100' } = request.query
+      const where: any = {}
+      if (source) where.source = source
+      if (result) where.result = result
+      const logs = await (prisma as any).postbackLog.findMany({
+        where,
+        orderBy: { receivedAt: 'desc' },
+        take: Math.min(200, parseInt(limit)),
+      })
+      return logs
+    }
+  )
 }

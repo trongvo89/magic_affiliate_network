@@ -43,6 +43,24 @@ interface CityAdsQuery {
 export default async function postbackRoutes(server: FastifyInstance) {
   const prisma: PrismaClient = (server as any).prisma
 
+  async function logPostback(data: {
+    source: string
+    rawQuery: Record<string, unknown>
+    result: 'ok' | 'error'
+    reason?: string
+    conversionId?: string
+    offerId?: string
+    publisherId?: string
+    xid?: string
+    status?: string
+  }) {
+    try {
+      await (prisma as any).postbackLog.create({ data })
+    } catch {
+      // Non-fatal — don't let logging failure break postback processing
+    }
+  }
+
   async function handleAppsFlyer(query: AppsflyerQuery, rawPayload: Record<string, unknown>) {
     const sourceRefId = query.af_tranid
     const appId = query.app_id
@@ -52,48 +70,43 @@ export default async function postbackRoutes(server: FastifyInstance) {
     const currency = query.event_revenue_currency || 'USD'
     const eventAt = query.install_time ? new Date(query.install_time) : new Date()
 
-    if (!sourceRefId) return { ok: true, reason: 'missing af_tranid' }
+    if (!sourceRefId) {
+      await logPostback({ source: 'appsflyer', rawQuery: rawPayload, result: 'error', reason: 'missing af_tranid' })
+      return { ok: true, reason: 'missing af_tranid' }
+    }
 
     const offer = await prisma.offer.findFirst({ where: { appId, mmpSource: MmpSource.APPSFLYER, status: 'ACTIVE' } })
-    if (!offer) return { ok: true, reason: 'offer not found' }
+    if (!offer) {
+      await logPostback({ source: 'appsflyer', rawQuery: rawPayload, result: 'error', reason: `offer not found: appId=${appId}` })
+      return { ok: true, reason: 'offer not found' }
+    }
 
     const publisher = publisherId ? await prisma.user.findUnique({ where: { id: publisherId } }) : null
-
     const commissionAmount = calculateCommission(offer.commissionType as CommType, offer.commissionValue, revenue)
-
-    // PENDING if: no publisher attribution, publisher ID given but not found, or PERCENT_REVENUE with missing revenue
     const status = determineStatus({ publisherId, publisher, commissionType: offer.commissionType as CommType, revenue })
 
     try {
       const conversion = await prisma.conversion.create({
         data: {
-          sourceType: MmpSource.APPSFLYER,
-          sourceRefId,
-          offerId: offer.id,
-          publisherId: publisher?.id ?? null,
-          eventType,
-          revenue,
-          commissionAmount,
-          currency,
-          status,
-          rawPayload: rawPayload as any,
-          eventAt,
+          sourceType: MmpSource.APPSFLYER, sourceRefId,
+          offerId: offer.id, publisherId: publisher?.id ?? null,
+          eventType, revenue, commissionAmount, currency, status,
+          rawPayload: rawPayload as any, eventAt,
         },
       })
+      await logPostback({ source: 'appsflyer', rawQuery: rawPayload, result: 'ok', conversionId: conversion.id, offerId: offer.id, publisherId: publisher?.id, xid: sourceRefId, status })
 
       if (status === 'APPROVED' && publisher?.postbackUrl) {
         setImmediate(() => sendOutboundPostback(prisma, conversion.id, publisher.postbackUrl!, {
-          click_id: publisher.id,
-          payout: String(commissionAmount),
-          event: eventType,
-          order_id: sourceRefId,
-          status: 'approved',
-          offer_id: offer.id,
-          offer_name: offer.name,
+          click_id: publisher.id, payout: String(commissionAmount), event: eventType,
+          order_id: sourceRefId, status: 'approved', offer_id: offer.id, offer_name: offer.name,
         }))
       }
     } catch (err: any) {
-      if (err.code === 'P2002') return { ok: true, reason: 'duplicate' }
+      if (err.code === 'P2002') {
+        await logPostback({ source: 'appsflyer', rawQuery: rawPayload, result: 'error', reason: 'duplicate xid', xid: sourceRefId, offerId: offer.id })
+        return { ok: true, reason: 'duplicate' }
+      }
       throw err
     }
 
@@ -109,47 +122,43 @@ export default async function postbackRoutes(server: FastifyInstance) {
     const currency = query.currency || 'USD'
     const eventAt = query.created_at ? new Date(query.created_at) : new Date()
 
-    if (!sourceRefId) return { ok: true, reason: 'missing transaction_id' }
+    if (!sourceRefId) {
+      await logPostback({ source: 'adjust', rawQuery: rawPayload, result: 'error', reason: 'missing transaction_id' })
+      return { ok: true, reason: 'missing transaction_id' }
+    }
 
     const offer = await prisma.offer.findFirst({ where: { appId: appToken, mmpSource: MmpSource.ADJUST, status: 'ACTIVE' } })
-    if (!offer) return { ok: true, reason: 'offer not found' }
+    if (!offer) {
+      await logPostback({ source: 'adjust', rawQuery: rawPayload, result: 'error', reason: `offer not found: appToken=${appToken}` })
+      return { ok: true, reason: 'offer not found' }
+    }
 
     const publisher = publisherId ? await prisma.user.findUnique({ where: { id: publisherId } }) : null
-
     const commissionAmount = calculateCommission(offer.commissionType as CommType, offer.commissionValue, revenue)
-
     const status = determineStatus({ publisherId, publisher, commissionType: offer.commissionType as CommType, revenue })
 
     try {
       const conversion = await prisma.conversion.create({
         data: {
-          sourceType: MmpSource.ADJUST,
-          sourceRefId,
-          offerId: offer.id,
-          publisherId: publisher?.id ?? null,
-          eventType,
-          revenue,
-          commissionAmount,
-          currency,
-          status,
-          rawPayload: rawPayload as any,
-          eventAt,
+          sourceType: MmpSource.ADJUST, sourceRefId,
+          offerId: offer.id, publisherId: publisher?.id ?? null,
+          eventType, revenue, commissionAmount, currency, status,
+          rawPayload: rawPayload as any, eventAt,
         },
       })
+      await logPostback({ source: 'adjust', rawQuery: rawPayload, result: 'ok', conversionId: conversion.id, offerId: offer.id, publisherId: publisher?.id, xid: sourceRefId, status })
 
       if (status === 'APPROVED' && publisher?.postbackUrl) {
         setImmediate(() => sendOutboundPostback(prisma, conversion.id, publisher.postbackUrl!, {
-          click_id: publisher.id,
-          payout: String(commissionAmount),
-          event: eventType,
-          order_id: sourceRefId,
-          status: 'approved',
-          offer_id: offer.id,
-          offer_name: offer.name,
+          click_id: publisher.id, payout: String(commissionAmount), event: eventType,
+          order_id: sourceRefId, status: 'approved', offer_id: offer.id, offer_name: offer.name,
         }))
       }
     } catch (err: any) {
-      if (err.code === 'P2002') return { ok: true, reason: 'duplicate' }
+      if (err.code === 'P2002') {
+        await logPostback({ source: 'adjust', rawQuery: rawPayload, result: 'error', reason: 'duplicate xid', xid: sourceRefId, offerId: offer.id })
+        return { ok: true, reason: 'duplicate' }
+      }
       throw err
     }
 
@@ -161,60 +170,57 @@ export default async function postbackRoutes(server: FastifyInstance) {
     const appId = query.offer_id
     const publisherId = query.sa
     const eventType = query.action_type || 'conversion'
-    // payout = commission CityAds pays Magic for this conversion (not the order/GMV total)
     const revenue = parseFloat(query.payout || '0') || 0
     const currency = query.payout_currency || query.order_total_currency || 'USD'
     const eventAt = query.conversion_time
       ? (/^\d+$/.test(query.conversion_time) ? new Date(Number(query.conversion_time) * 1000) : new Date(query.conversion_time))
       : new Date()
 
-    if (!sourceRefId) return { ok: true, reason: 'missing xid' }
+    if (!sourceRefId) {
+      await logPostback({ source: 'cityads', rawQuery: rawPayload, result: 'error', reason: 'missing xid' })
+      return { ok: true, reason: 'missing xid' }
+    }
 
     const offer = await prisma.offer.findFirst({ where: { appId, mmpSource: MmpSource.CITYADS, status: 'ACTIVE' } })
-    if (!offer) return { ok: true, reason: 'offer not found' }
+    if (!offer) {
+      await logPostback({ source: 'cityads', rawQuery: rawPayload, result: 'error', reason: `offer not found: offer_id=${appId}`, xid: sourceRefId })
+      return { ok: true, reason: 'offer not found' }
+    }
 
     const publisher = publisherId ? await prisma.user.findUnique({ where: { id: publisherId } }) : null
 
     const commissionAmount = calculateCommission(offer.commissionType as CommType, offer.commissionValue, revenue)
-
     const status = determineCityAdsStatus({
-      publisherId,
-      publisher,
-      cityAdsStatus: query.status,
-      commissionType: offer.commissionType as CommType,
-      revenue,
+      publisherId, publisher, cityAdsStatus: query.status,
+      commissionType: offer.commissionType as CommType, revenue,
     })
+
+    if (publisherId && !publisher) {
+      await logPostback({ source: 'cityads', rawQuery: rawPayload, result: 'error', reason: `publisher not found: sa=${publisherId}`, xid: sourceRefId, offerId: offer.id })
+    }
 
     try {
       const conversion = await prisma.conversion.create({
         data: {
-          sourceType: MmpSource.CITYADS,
-          sourceRefId,
-          offerId: offer.id,
-          publisherId: publisher?.id ?? null,
-          eventType,
-          revenue,
-          commissionAmount,
-          currency,
-          status,
-          rawPayload: rawPayload as any,
-          eventAt,
+          sourceType: MmpSource.CITYADS, sourceRefId,
+          offerId: offer.id, publisherId: publisher?.id ?? null,
+          eventType, revenue, commissionAmount, currency, status,
+          rawPayload: rawPayload as any, eventAt,
         },
       })
+      await logPostback({ source: 'cityads', rawQuery: rawPayload, result: 'ok', conversionId: conversion.id, offerId: offer.id, publisherId: publisher?.id, xid: sourceRefId, status })
 
       if (status === 'APPROVED' && publisher?.postbackUrl) {
         setImmediate(() => sendOutboundPostback(prisma, conversion.id, publisher.postbackUrl!, {
-          click_id: publisher.id,
-          payout: String(commissionAmount),
-          event: eventType,
-          order_id: sourceRefId,
-          status: 'approved',
-          offer_id: offer.id,
-          offer_name: offer.name,
+          click_id: publisher.id, payout: String(commissionAmount), event: eventType,
+          order_id: sourceRefId, status: 'approved', offer_id: offer.id, offer_name: offer.name,
         }))
       }
     } catch (err: any) {
-      if (err.code === 'P2002') return { ok: true, reason: 'duplicate' }
+      if (err.code === 'P2002') {
+        await logPostback({ source: 'cityads', rawQuery: rawPayload, result: 'error', reason: 'duplicate xid', xid: sourceRefId, offerId: offer.id })
+        return { ok: true, reason: 'duplicate' }
+      }
       throw err
     }
 
@@ -234,9 +240,12 @@ export default async function postbackRoutes(server: FastifyInstance) {
         await handleAdjust(query as AdjustQuery, rawPayload)
       } else if (source === 'cityads') {
         await handleCityAds(query as CityAdsQuery, rawPayload)
+      } else {
+        await logPostback({ source, rawQuery: rawPayload, result: 'error', reason: `unknown source: ${source}` })
       }
     } catch (err) {
       request.log.error(err, 'postback error')
+      await logPostback({ source, rawQuery: rawPayload, result: 'error', reason: String(err) })
     }
 
     return { ok: true }

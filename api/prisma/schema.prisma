@@ -363,3 +363,21 @@ enum PayItemStatus {
   PAID
   CANCELLED
 }
+
+model PostbackLog {
+  id           String   @id @default(cuid())
+  source       String
+  receivedAt   DateTime @default(now())
+  rawQuery     Json     @default("{}")
+  result       String
+  reason       String?
+  conversionId String?
+  offerId      String?
+  publisherId  String?
+  xid          String?
+  status       String?
+
+  @@index([source])
+  @@index([receivedAt(sort: Desc)])
+  @@index([result])
+}
