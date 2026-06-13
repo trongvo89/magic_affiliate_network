@@ -166,24 +166,25 @@ export default async function postbackRoutes(server: FastifyInstance) {
   }
 
   async function handleCityAds(query: CityAdsQuery, rawPayload: Record<string, unknown>) {
-    const sourceRefId = query.xid
+    const rawXid = query.xid
     const appId = query.offer_id
     const publisherId = query.sa
     const eventType = query.action_type || 'conversion'
     const revenue = parseFloat(query.payout || '0') || 0
     const currency = query.payout_currency || query.order_total_currency || 'USD'
-    const eventAt = query.conversion_time
-      ? (/^\d+$/.test(query.conversion_time) ? new Date(Number(query.conversion_time) * 1000) : new Date(query.conversion_time))
+    const conversionTime = query.conversion_time || ''
+    const eventAt = conversionTime
+      ? (/^\d+$/.test(conversionTime) ? new Date(Number(conversionTime) * 1000) : new Date(conversionTime))
       : new Date()
 
-    if (!sourceRefId) {
-      await logPostback({ source: 'cityads', rawQuery: rawPayload, result: 'error', reason: 'missing xid' })
-      return { ok: true, reason: 'missing xid' }
-    }
+    // xid can be empty for CPL actions — synthesize a dedup key from available fields
+    const sourceRefId = (rawXid && rawXid.trim())
+      ? rawXid.trim()
+      : `${appId || 'noOffer'}_${publisherId || 'noPub'}_${conversionTime || Date.now()}`
 
     const offer = await prisma.offer.findFirst({ where: { appId, mmpSource: MmpSource.CITYADS, status: 'ACTIVE' } })
     if (!offer) {
-      await logPostback({ source: 'cityads', rawQuery: rawPayload, result: 'error', reason: `offer not found: offer_id=${appId}`, xid: sourceRefId })
+      await logPostback({ source: 'cityads', rawQuery: rawPayload, result: 'error', reason: `offer not found: offer_id=${appId} (check CityAds Offer ID in offer settings)`, xid: sourceRefId })
       return { ok: true, reason: 'offer not found' }
     }
 
