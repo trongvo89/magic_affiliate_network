@@ -98,23 +98,23 @@ export default function AdminDashboard() {
 
           {Object.keys(stats.today.byCurrency).length === 0 ? (
             <div className="bg-white rounded-xl p-4 border border-gray-200">
-              <div className="text-xs text-gray-500 mb-1">Revenue Today</div>
+              <div className="text-xs text-gray-500 mb-1">Commission Today</div>
               <div className="text-2xl font-bold text-gray-900">{fmtMoney(0)}</div>
             </div>
           ) : Object.entries(stats.today.byCurrency).map(([cur, s]) => (
             <div key={cur} className="bg-white rounded-xl p-4 border border-gray-200">
-              <div className="text-xs text-gray-500 mb-1">Revenue Today <span className="font-semibold text-gray-700">({cur})</span></div>
-              <div className="text-2xl font-bold text-gray-900">{fmtMoney(s.revenue, cur)}</div>
-              <div className="text-xs text-green-600 mt-0.5">Commission: {fmtMoney(s.commission, cur)}</div>
+              <div className="text-xs text-gray-500 mb-1">Commission Today <span className="font-semibold text-gray-700">({cur})</span></div>
+              <div className="text-2xl font-bold text-green-700">{fmtMoney(s.commission, cur)}</div>
+              <div className="text-xs text-gray-400 mt-0.5">Order value: {fmtMoney(s.revenue, cur)}</div>
             </div>
           ))}
 
           {/* Month stats */}
           {Object.entries(stats.month.byCurrency).map(([cur, s]) => (
             <div key={`month-${cur}`} className="bg-white rounded-xl p-4 border border-gray-200">
-              <div className="text-xs text-gray-500 mb-1">Revenue 30d <span className="font-semibold text-gray-700">({cur})</span></div>
-              <div className="text-2xl font-bold text-gray-900">{fmtMoney(s.revenue, cur)}</div>
-              <div className="text-xs text-gray-500 mt-0.5">{s.conversions} conversions</div>
+              <div className="text-xs text-gray-500 mb-1">Commission 30d <span className="font-semibold text-gray-700">({cur})</span></div>
+              <div className="text-2xl font-bold text-green-700">{fmtMoney(s.commission, cur)}</div>
+              <div className="text-xs text-gray-400 mt-0.5">Order value: {fmtMoney(s.revenue, cur)} · {s.conversions} conversions</div>
             </div>
           ))}
 
@@ -134,7 +134,7 @@ export default function AdminDashboard() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                 <tr>
-                  {['Time', 'Source', 'Offer', 'Publisher', 'Event', 'Revenue', 'Commission', 'Status'].map((h) => (
+                  {['Time', 'Source', 'Offer', 'Publisher', 'Event', 'Commission', 'Order Value', 'Status'].map((h) => (
                     <th key={h} className="px-4 py-2 text-left font-medium">{h}</th>
                   ))}
                 </tr>
@@ -147,8 +147,8 @@ export default function AdminDashboard() {
                     <td className="px-4 py-2.5 font-medium text-gray-900">{c.offer?.name}</td>
                     <td className="px-4 py-2.5 text-gray-600">{c.publisher?.name || '—'}</td>
                     <td className="px-4 py-2.5 text-gray-600 capitalize">{c.eventType}</td>
-                    <td className="px-4 py-2.5 text-gray-900">{fmtMoney(c.revenue, c.currency)}</td>
                     <td className="px-4 py-2.5 text-green-700 font-medium">{fmtMoney(c.commissionAmount, c.currency)}</td>
+                    <td className="px-4 py-2.5 text-gray-400 text-xs">{fmtMoney(c.revenue, c.currency)}</td>
                     <td className="px-4 py-2.5">{statusBadge(c.status)}</td>
                   </tr>
                 ))}
