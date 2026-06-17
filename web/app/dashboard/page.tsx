@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { api, fmtMoney, fmtDate } from '@/lib/api'
 
 interface Stats {
@@ -30,6 +30,34 @@ interface Conversion {
   status: string
 }
 
+type Rates = Record<string, number>
+
+const DISPLAY_CURRENCIES = ['USD', 'VND', 'RUB']
+
+async function fetchRates(): Promise<Rates> {
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/USD')
+    const data = await res.json()
+    if (data.result === 'success') return data.rates
+  } catch {}
+  return { USD: 1, VND: 25000, RUB: 90 }
+}
+
+function convertAmount(amount: number, fromCurrency: string, toCurrency: string, rates: Rates): number {
+  if (fromCurrency === toCurrency) return amount
+  const fromRate = rates[fromCurrency] || 1
+  const toRate = rates[toCurrency] || 1
+  return (amount / fromRate) * toRate
+}
+
+function aggregateByCurrency(byCurrency: Record<string, number>, targetCurrency: string, rates: Rates): number {
+  let total = 0
+  for (const [cur, amt] of Object.entries(byCurrency)) {
+    total += convertAmount(amt, cur, targetCurrency, rates)
+  }
+  return total
+}
+
 function toDateStr(d: Date) {
   return d.toISOString().slice(0, 10)
 }
@@ -41,6 +69,9 @@ export default function DashboardPage() {
   const [error, setError] = useState('')
   const [from, setFrom] = useState(() => toDateStr(new Date(Date.now() - 30 * 86400000)))
   const [to, setTo] = useState(() => toDateStr(new Date()))
+  const [displayCurrency, setDisplayCurrency] = useState('USD')
+  const [rates, setRates] = useState<Rates>({ USD: 1 })
+  const [ratesLoaded, setRatesLoaded] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -60,6 +91,15 @@ export default function DashboardPage() {
   }, [from, to])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => { fetchRates().then(r => { setRates(r); setRatesLoaded(true) }) }, [])
+
+  const rangeEarned = useMemo(() =>
+    stats ? aggregateByCurrency(stats.range.approvedEarnedByCurrency, displayCurrency, rates) : 0,
+    [stats, displayCurrency, rates])
+
+  const totalApproved = useMemo(() =>
+    stats ? aggregateByCurrency(stats.totalApprovedByCurrency, displayCurrency, rates) : 0,
+    [stats, displayCurrency, rates])
 
   const statusBadge = (s: string) => {
     const cls: Record<string, string> = {
@@ -103,6 +143,17 @@ export default function DashboardPage() {
               {label}
             </button>
           ))}
+          <div className="w-px h-6 bg-gray-200" />
+          <select
+            value={displayCurrency}
+            onChange={(e) => setDisplayCurrency(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-900 font-medium focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+          >
+            {DISPLAY_CURRENCIES.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+          {ratesLoaded && <span className="text-[10px] text-gray-400">Live rates</span>}
           <button
             onClick={load}
             disabled={loading}
@@ -123,7 +174,7 @@ export default function DashboardPage() {
       )}
 
       {stats && (
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-xl p-5 border border-gray-200">
             <div className="text-xs text-gray-500 mb-1">Clicks</div>
             <div className="text-2xl font-bold text-gray-900">{stats.range.clicks}</div>
@@ -138,29 +189,16 @@ export default function DashboardPage() {
               {stats.range.clicks > 0 ? `${stats.cvr}%` : '—'}
             </div>
           </div>
-
-          {/* Earned per currency */}
-          {Object.entries(stats.range.approvedEarnedByCurrency).length === 0 ? (
-            <div className="bg-white rounded-xl p-5 border border-gray-200">
-              <div className="text-xs text-gray-500 mb-1">Earned (range)</div>
-              <div className="text-2xl font-bold text-green-600">{fmtMoney(0)}</div>
-            </div>
-          ) : Object.entries(stats.range.approvedEarnedByCurrency).map(([cur, amt]) => (
-            <div key={cur} className="bg-white rounded-xl p-5 border border-gray-200">
-              <div className="text-xs text-gray-500 mb-1">Earned <span className="font-semibold text-gray-700">({cur})</span></div>
-              <div className="text-2xl font-bold text-green-600">{fmtMoney(amt, cur)}</div>
-              <div className="text-xs text-gray-400 mt-0.5">range period</div>
-            </div>
-          ))}
-
-          {/* Total approved per currency */}
-          {Object.entries(stats.totalApprovedByCurrency).map(([cur, amt]) => (
-            <div key={`total-${cur}`} className="bg-white rounded-xl p-5 border border-gray-200">
-              <div className="text-xs text-gray-500 mb-1">Total Approved <span className="font-semibold text-gray-700">({cur})</span></div>
-              <div className="text-2xl font-bold text-green-700">{fmtMoney(amt, cur)}</div>
-              <div className="text-xs text-gray-400 mt-0.5">all time</div>
-            </div>
-          ))}
+          <div className="bg-white rounded-xl p-5 border border-gray-200">
+            <div className="text-xs text-gray-500 mb-1">Earned (range)</div>
+            <div className="text-2xl font-bold text-green-600">{fmtMoney(rangeEarned, displayCurrency)}</div>
+            <div className="text-xs text-gray-400 mt-0.5">{stats.range.approvedConversions} approved</div>
+          </div>
+          <div className="bg-white rounded-xl p-5 border border-gray-200">
+            <div className="text-xs text-gray-500 mb-1">Total Approved</div>
+            <div className="text-2xl font-bold text-green-700">{fmtMoney(totalApproved, displayCurrency)}</div>
+            <div className="text-xs text-gray-400 mt-0.5">all time</div>
+          </div>
         </div>
       )}
 
@@ -171,7 +209,7 @@ export default function DashboardPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>
-              {['Date', 'Offer', 'Event', 'Revenue', 'Commission', 'Status'].map((h) => (
+              {['Date', 'Offer', 'Event', 'Commission', 'Order Value', 'Status'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
               ))}
             </tr>
@@ -182,8 +220,12 @@ export default function DashboardPage() {
                 <td className="px-4 py-2.5 text-gray-500 text-xs whitespace-nowrap">{fmtDate(c.eventAt)}</td>
                 <td className="px-4 py-2.5 font-medium text-gray-900">{c.offer?.name}</td>
                 <td className="px-4 py-2.5 text-gray-600 capitalize">{c.eventType}</td>
-                <td className="px-4 py-2.5 text-gray-900">{fmtMoney(c.revenue, c.currency)}</td>
-                <td className="px-4 py-2.5 text-green-700 font-medium">{fmtMoney(c.commissionAmount, c.currency)}</td>
+                <td className="px-4 py-2.5 text-green-700 font-medium">
+                  {fmtMoney(convertAmount(c.commissionAmount, c.currency, displayCurrency, rates), displayCurrency)}
+                </td>
+                <td className="px-4 py-2.5 text-gray-400 text-xs">
+                  {fmtMoney(convertAmount(c.revenue, c.currency, displayCurrency, rates), displayCurrency)}
+                </td>
                 <td className="px-4 py-2.5">{statusBadge(c.status)}</td>
               </tr>
             ))}
