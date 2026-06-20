@@ -176,7 +176,7 @@ export default async function publisherRoutes(server: FastifyInstance) {
     const offerIds = [...new Set([...convOfferIds, ...clickOfferIds])]
 
     const offers = await prisma.offer.findMany({
-      where: { id: { in: offerIds } },
+      where: { id: { in: offerIds }, status: 'ACTIVE' },
       select: { id: true, name: true, mmpSource: true, currency: true },
     })
     const offerMap = Object.fromEntries(offers.map(o => [o.id, o]))
