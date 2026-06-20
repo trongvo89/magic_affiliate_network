@@ -98,8 +98,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="flex h-screen bg-slate-50">
       <aside className="w-60 bg-[#0F172A] flex flex-col flex-shrink-0">
         {/* Logo — PNG has dark bg, blends with sidebar */}
-        <div className="px-3 pt-3 pb-2 border-b border-white/10 flex justify-center">
-          <LogoMark size={120} />
+        <div className="px-6 py-4 border-b border-white/10 flex justify-center">
+          <LogoMark size={160} />
         </div>
 
         {/* Nav label */}
