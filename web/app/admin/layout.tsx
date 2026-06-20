@@ -99,10 +99,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <aside className="w-60 bg-[#0F172A] flex flex-col flex-shrink-0">
         {/* Logo — PNG has dark bg, blends with sidebar */}
         <div className="px-3 pt-3 pb-2 border-b border-white/10">
-          <div className="flex items-center gap-2">
-            <LogoMark size={52} />
-            <div className="text-orange-400 text-xs font-semibold tracking-wide">Affiliate</div>
-          </div>
+          <LogoMark size={80} />
         </div>
 
         {/* Nav label */}
