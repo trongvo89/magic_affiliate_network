@@ -67,7 +67,7 @@ export default async function postbackRoutes(server: FastifyInstance) {
     const publisherId = query.af_sub1
     const eventType = query.event_name || 'install'
     const revenue = parseFloat(query.event_revenue || '0') || 0
-    const currency = query.event_revenue_currency || 'USD'
+    const rawCurrency = query.event_revenue_currency || null
     const eventAt = query.install_time ? new Date(query.install_time) : new Date()
 
     if (!sourceRefId) {
@@ -81,6 +81,7 @@ export default async function postbackRoutes(server: FastifyInstance) {
       return { ok: true, reason: 'offer not found' }
     }
 
+    const currency = offer.currency || rawCurrency || 'USD'
     const publisher = publisherId ? await prisma.user.findUnique({ where: { id: publisherId } }) : null
     const commissionAmount = calculateCommission(offer.commissionType as CommType, offer.commissionValue, revenue)
     const status = determineStatus({ publisherId, publisher, commissionType: offer.commissionType as CommType, revenue })
@@ -119,7 +120,7 @@ export default async function postbackRoutes(server: FastifyInstance) {
     const publisherId = query.partner_parameter_1
     const eventType = query.event_token || 'install'
     const revenue = parseFloat(query.revenue || '0') || 0
-    const currency = query.currency || 'USD'
+    const rawCurrency = query.currency || null
     const eventAt = query.created_at ? new Date(query.created_at) : new Date()
 
     if (!sourceRefId) {
@@ -132,6 +133,8 @@ export default async function postbackRoutes(server: FastifyInstance) {
       await logPostback({ source: 'adjust', rawQuery: rawPayload, result: 'error', reason: `offer not found: appToken=${appToken}` })
       return { ok: true, reason: 'offer not found' }
     }
+
+    const currency = offer.currency || rawCurrency || 'USD'
 
     const publisher = publisherId ? await prisma.user.findUnique({ where: { id: publisherId } }) : null
     const commissionAmount = calculateCommission(offer.commissionType as CommType, offer.commissionValue, revenue)
@@ -171,7 +174,7 @@ export default async function postbackRoutes(server: FastifyInstance) {
     const publisherId = query.sa
     const eventType = query.action_type || 'conversion'
     const revenue = parseFloat(query.payout || '0') || 0
-    const currency = query.payout_currency || query.order_total_currency || 'USD'
+    const rawCurrency = query.payout_currency || query.order_total_currency || null
     const conversionTime = query.conversion_time || ''
     const eventAt = conversionTime
       ? (/^\d+$/.test(conversionTime) ? new Date(Number(conversionTime) * 1000) : new Date(conversionTime))
@@ -188,6 +191,7 @@ export default async function postbackRoutes(server: FastifyInstance) {
       return { ok: true, reason: 'offer not found' }
     }
 
+    const currency = offer.currency || rawCurrency || 'USD'
     const publisher = publisherId ? await prisma.user.findUnique({ where: { id: publisherId } }) : null
 
     const commissionAmount = calculateCommission(offer.commissionType as CommType, offer.commissionValue, revenue)
