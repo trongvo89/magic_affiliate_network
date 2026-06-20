@@ -123,7 +123,7 @@ export default function SettingsPage() {
                 ['{payout}', 'Hoa hồng được nhận'],
                 ['{event}', 'Loại event (sale, lead…)'],
                 ['{order_id}', 'Click/transaction ID từ MMP'],
-                ['{status}', 'Trạng thái (approved)'],
+                ['{status}', 'Trạng thái (approved/pending/rejected)'],
                 ['{click_id}', 'Publisher ID của bạn'],
                 ['{offer_id}', 'ID offer trong Magic'],
                 ['{offer_name}', 'Tên offer trong Magic'],
