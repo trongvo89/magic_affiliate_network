@@ -62,8 +62,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex h-screen bg-slate-50">
       <aside className="w-60 bg-[#0F172A] flex flex-col flex-shrink-0">
         {/* Logo — PNG has dark bg, blends with sidebar */}
-        <div className="px-3 pt-3 pb-2 border-b border-white/10">
-          <LogoMark size={80} />
+        <div className="px-3 pt-3 pb-2 border-b border-white/10 flex justify-center">
+          <LogoMark size={110} />
         </div>
 
         {/* Nav label */}
