@@ -381,3 +381,18 @@ model PostbackLog {
   @@index([receivedAt(sort: Desc)])
   @@index([result])
 }
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  userName   String
+  action     String
+  entity     String
+  entityId   String?
+  changes    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt(sort: Desc)])
+}

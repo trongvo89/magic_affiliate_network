@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest } from 'fastify'
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import { auditLog } from '../lib/audit'
 
 function parseDate(s: string | undefined): Date | null {
   if (!s) return null
@@ -261,7 +262,15 @@ export default async function publisherRoutes(server: FastifyInstance) {
         data.password = await bcrypt.hash(password, 12)
       }
 
+      const before = await prisma.user.findUnique({ where: { id }, select: { postbackUrl: true, name: true } })
       const updated = await prisma.user.update({ where: { id }, data, select: { id: true, email: true, name: true, postbackUrl: true } })
+      const changes: Record<string, any> = {}
+      if (postbackUrl !== undefined && postbackUrl !== before?.postbackUrl) changes.postbackUrl = { from: before?.postbackUrl, to: postbackUrl }
+      if (name && name !== before?.name) changes.name = { from: before?.name, to: name }
+      if (Object.keys(changes).length > 0) {
+        const user = request.user as any
+        await auditLog(prisma, { userId: id, userName: user.name || user.email, action: 'UPDATE', entity: 'User', entityId: id, changes })
+      }
       return updated
     }
   )

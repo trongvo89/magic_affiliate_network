@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyRequest } from 'fastify'
 import { PrismaClient } from '@prisma/client'
+import { auditLog, diffChanges } from '../lib/audit'
 
 function parseDate(s: string | undefined): Date | null {
   if (!s) return null
@@ -350,6 +351,8 @@ export default async function adminRoutes(server: FastifyInstance) {
         const offer = await prisma.offer.create({
           data: { name, appName, appId, mmpSource: mmpSource as any, commissionType: commissionType as any, commissionValue, currency: currency || 'USD', destinationUrl: destinationUrl || null, pubCommissionDisplay: pubCommissionDisplay || null },
         })
+        const user = request.user as any
+        await auditLog(prisma, { userId: user.id, userName: user.name || user.email, action: 'CREATE', entity: 'Offer', entityId: offer.id, changes: { name, appId, mmpSource, commissionType, commissionValue, currency, destinationUrl } })
         return reply.code(201).send(offer)
       } catch (err: any) {
         if (err.code === 'P2002') {
@@ -377,7 +380,14 @@ export default async function adminRoutes(server: FastifyInstance) {
       if (destinationUrl !== undefined) data.destinationUrl = destinationUrl || null
       if (pubCommissionDisplay !== undefined) data.pubCommissionDisplay = pubCommissionDisplay || null
       try {
-        return await prisma.offer.update({ where: { id }, data })
+        const before = await prisma.offer.findUnique({ where: { id } })
+        const updated = await prisma.offer.update({ where: { id }, data })
+        if (before) {
+          const user = request.user as any
+          const changes = diffChanges(before as any, data)
+          if (changes) await auditLog(prisma, { userId: user.id, userName: user.name || user.email, action: 'UPDATE', entity: 'Offer', entityId: id, changes })
+        }
+        return updated
       } catch (err: any) {
         if (err.code === 'P2002') {
           return reply.code(400).send({ error: 'An offer with this App ID / CityAds Offer ID already exists' })
@@ -391,7 +401,10 @@ export default async function adminRoutes(server: FastifyInstance) {
     '/offers/:id',
     async (request, reply) => {
       const { id } = request.params
+      const offer = await prisma.offer.findUnique({ where: { id }, select: { name: true, appId: true } })
       await prisma.offer.delete({ where: { id } })
+      const user = request.user as any
+      await auditLog(prisma, { userId: user.id, userName: user.name || user.email, action: 'DELETE', entity: 'Offer', entityId: id, changes: { name: offer?.name, appId: offer?.appId } })
       return reply.code(204).send()
     }
   )
@@ -634,12 +647,10 @@ export default async function adminRoutes(server: FastifyInstance) {
         select: { id: true, name: true, email: true, role: true, status: true },
       })
 
-      if (role) {
-        console.log(`[audit] admin ${requesterId} changed role of user ${id} to ${role}`)
-      }
-      if (status) {
-        console.log(`[audit] admin ${requesterId} changed status of user ${id} to ${status}`)
-      }
+      const changes: Record<string, any> = {}
+      if (role) changes.role = { from: null, to: role }
+      if (status) changes.status = { from: null, to: status }
+      await auditLog(prisma, { userId: requesterId, userName: (request.user as any).name || '', action: 'UPDATE', entity: 'User', entityId: id, changes })
 
       return updated
     }
@@ -682,6 +693,24 @@ export default async function adminRoutes(server: FastifyInstance) {
         take: Math.min(200, parseInt(limit)),
       })
       return logs
+    }
+  )
+
+  // Audit Logs
+  server.get<{ Querystring: { page?: string; limit?: string; entity?: string; action?: string } }>(
+    '/audit-logs',
+    async (request) => {
+      const { page = '1', limit = '50', entity, action } = request.query
+      const skip = (parseInt(page) - 1) * parseInt(limit)
+      const where: any = {}
+      if (entity) where.entity = entity
+      if (action) where.action = action
+
+      const [logs, total] = await Promise.all([
+        (prisma as any).auditLog.findMany({ where, skip, take: parseInt(limit), orderBy: { createdAt: 'desc' } }),
+        (prisma as any).auditLog.count({ where }),
+      ])
+      return { logs, total, page: parseInt(page), limit: parseInt(limit) }
     }
   )
 }
