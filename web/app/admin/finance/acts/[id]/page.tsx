@@ -44,6 +44,7 @@ interface Payment {
 interface Order {
   id: string
   orderId: string
+  conversionId?: string | null
   publisher?: { name: string } | null
   trackingStatus: string
   advertiserStatus: string
@@ -52,6 +53,7 @@ interface Order {
   revenue: number
   payout: number
   margin: number
+  conversion?: { revenue: number; commissionAmount: number; status: string } | null
 }
 
 interface OrdersData {
@@ -63,44 +65,38 @@ interface OrdersData {
   pendingCount: number
 }
 
-const BLANK_PAYMENT = {
-  amount: '',
-  currency: '',
-  paymentDate: '',
-  paymentMethod: '',
-  transactionReference: '',
-  notes: '',
+interface ReconciliationSummary {
+  totalCsvOrders: number
+  matchedOrders: number
+  unmatchedCsvOrders: number
+  unmatchedConversions: number
+  unmatchedConversionsList: { id: string; sourceRefId: string; revenue: number; commissionAmount: number; status: string; currency: string; publisherId: string }[]
+  revenueMatchCount: number
+  revenueMismatchCount: number
+  totalTrackedRevenue: number
+  totalAdvertiserRevenue: number
+  revenueDelta: number
+  totalTrackedPayout: number
+  totalAdvertiserPayout: number
+  payoutDelta: number
+  byFinalStatus: Record<string, number>
+  byTrackingVsAdvertiser: { bothApproved: number; trackingApprovedAdvRejected: number; trackingRejectedAdvApproved: number; otherMismatch: number }
 }
 
-const BLANK_INVOICE = {
-  invoiceDate: '',
-  dueDate: '',
-  amount: '',
-  currency: '',
-  notes: '',
-}
+const BLANK_PAYMENT = { amount: '', currency: '', paymentDate: '', paymentMethod: '', transactionReference: '', notes: '' }
+const BLANK_INVOICE = { invoiceDate: '', dueDate: '', amount: '', currency: '', notes: '' }
 
 function statusBadge(s: string) {
   const cls: Record<string, string> = {
-    DRAFT: 'bg-gray-100 text-gray-600',
-    UPLOADED: 'bg-blue-100 text-blue-700',
-    RECONCILED: 'bg-blue-100 text-blue-700',
-    APPROVED: 'bg-green-100 text-green-700',
-    LOCKED: 'bg-green-100 text-green-700',
-    INVOICE_SENT: 'bg-yellow-100 text-yellow-700',
-    PAYMENT_PENDING: 'bg-yellow-100 text-yellow-700',
-    PAID: 'bg-green-100 text-green-700',
-    CLOSED: 'bg-green-100 text-green-700',
+    DRAFT: 'bg-gray-100 text-gray-600', UPLOADED: 'bg-blue-100 text-blue-700', RECONCILED: 'bg-blue-100 text-blue-700',
+    APPROVED: 'bg-green-100 text-green-700', LOCKED: 'bg-green-100 text-green-700', INVOICE_SENT: 'bg-yellow-100 text-yellow-700',
+    PAYMENT_PENDING: 'bg-yellow-100 text-yellow-700', PAID: 'bg-green-100 text-green-700', CLOSED: 'bg-green-100 text-green-700',
     CANCELLED: 'bg-red-100 text-red-700',
   }
-  return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cls[s] || 'bg-gray-100 text-gray-600'}`}>
-      {s}
-    </span>
-  )
+  return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cls[s] || 'bg-gray-100 text-gray-600'}`}>{s}</span>
 }
 
-function orderStatusBadge(s: string, type: 'tracking' | 'adv' | 'final' | 'payment') {
+function orderStatusBadge(s: string) {
   const greenSet = new Set(['APPROVED', 'VALID', 'PAID', 'SETTLED'])
   const redSet = new Set(['REJECTED', 'INVALID', 'FRAUD', 'CANCELLED'])
   const yellowSet = new Set(['HOLD', 'PENDING', 'REVIEW'])
@@ -124,44 +120,39 @@ export default function ActDetailPage() {
   const [ordersData, setOrdersData] = useState<Partial<OrdersData>>({})
   const [ordersLoading, setOrdersLoading] = useState(false)
   const [ordersPage, setOrdersPage] = useState(1)
+  const [ordersFilter, setOrdersFilter] = useState('all')
   const ordersLimit = 50
+
+  const [recon, setRecon] = useState<ReconciliationSummary | null>(null)
+  const [showUnmatched, setShowUnmatched] = useState(false)
+  const [syncing, setSyncing] = useState(false)
 
   const [actionLoading, setActionLoading] = useState(false)
   const [actionError, setActionError] = useState('')
 
-  // CSV upload
   const [uploadLoading, setUploadLoading] = useState(false)
-  const [uploadResult, setUploadResult] = useState<{ matched?: number; unmatched?: number; errors?: string[] } | null>(null)
+  const [uploadResult, setUploadResult] = useState<{ matched?: number; unmatched?: number; unmatchedConversions?: number; errors?: string[] } | null>(null)
   const [uploadError, setUploadError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Order inline actions
   const [orderAction, setOrderAction] = useState<{ id: string; type: 'reject' | 'hold'; reason: string } | null>(null)
   const [orderActionLoading, setOrderActionLoading] = useState(false)
 
-  // Invoice modal
   const [showInvoiceModal, setShowInvoiceModal] = useState(false)
   const [invoiceForm, setInvoiceForm] = useState(BLANK_INVOICE)
   const [invoiceSaving, setInvoiceSaving] = useState(false)
   const [invoiceError, setInvoiceError] = useState('')
 
-  // Payment modal
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentForm, setPaymentForm] = useState(BLANK_PAYMENT)
   const [paymentSaving, setPaymentSaving] = useState(false)
   const [paymentError, setPaymentError] = useState('')
 
   const loadAct = useCallback(async () => {
-    setActLoading(true)
-    setActError('')
-    try {
-      const { data } = await api.get(`/admin/finance/acts/${id}`)
-      setAct(data)
-    } catch (err: any) {
-      setActError(err.response?.data?.error || 'Failed to load act')
-    } finally {
-      setActLoading(false)
-    }
+    setActLoading(true); setActError('')
+    try { const { data } = await api.get(`/admin/finance/acts/${id}`); setAct(data) }
+    catch (err: any) { setActError(err.response?.data?.error || 'Failed to load act') }
+    finally { setActLoading(false) }
   }, [id])
 
   const loadOrders = useCallback(async () => {
@@ -169,138 +160,105 @@ export default function ActDetailPage() {
     setOrdersLoading(true)
     try {
       const params = new URLSearchParams({ page: String(ordersPage), limit: String(ordersLimit) })
+      if (ordersFilter !== 'all') params.set('filter', ordersFilter)
       const { data } = await api.get(`/admin/finance/acts/${id}/orders?${params}`)
       setOrders(data.orders || data)
       setOrdersData(data)
-    } catch {
-      // silently fail orders load
-    } finally {
-      setOrdersLoading(false)
-    }
-  }, [id, ordersPage])
+    } catch {}
+    finally { setOrdersLoading(false) }
+  }, [id, ordersPage, ordersFilter])
+
+  const loadRecon = useCallback(async () => {
+    if (!id) return
+    try { const { data } = await api.get(`/admin/finance/acts/${id}/reconciliation-summary`); setRecon(data) }
+    catch {}
+  }, [id])
 
   useEffect(() => { loadAct() }, [loadAct])
   useEffect(() => { loadOrders() }, [loadOrders])
+  useEffect(() => { loadRecon() }, [loadRecon])
 
   async function doAction(action: string) {
-    setActionLoading(true)
-    setActionError('')
-    try {
-      await api.patch(`/admin/finance/acts/${id}/status`, { action })
-      await loadAct()
-    } catch (err: any) {
-      setActionError(err.response?.data?.error || `Action "${action}" failed`)
-    } finally {
-      setActionLoading(false)
-    }
+    setActionLoading(true); setActionError('')
+    try { await api.patch(`/admin/finance/acts/${id}/status`, { action }); await loadAct() }
+    catch (err: any) { setActionError(err.response?.data?.error || `Action "${action}" failed`) }
+    finally { setActionLoading(false) }
   }
 
   async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    setUploadLoading(true)
-    setUploadError('')
-    setUploadResult(null)
+    setUploadLoading(true); setUploadError(''); setUploadResult(null)
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const { data } = await api.post(`/admin/finance/acts/${id}/upload`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
+      const formData = new FormData(); formData.append('file', file)
+      const { data } = await api.post(`/admin/finance/acts/${id}/upload`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
       setUploadResult(data)
-      await loadAct()
-      await loadOrders()
-    } catch (err: any) {
-      setUploadError(err.response?.data?.error || 'Upload failed')
-    } finally {
-      setUploadLoading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
+      await Promise.all([loadAct(), loadOrders(), loadRecon()])
+    } catch (err: any) { setUploadError(err.response?.data?.error || 'Upload failed') }
+    finally { setUploadLoading(false); if (fileInputRef.current) fileInputRef.current.value = '' }
   }
 
   async function handleOrderAction(orderId: string, action: 'approve' | 'reject' | 'hold', reason?: string) {
     setOrderActionLoading(true)
     try {
-      await api.patch(`/admin/finance/acts/${id}/orders/${orderId}`, { action, reason })
-      await loadOrders()
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Action failed')
-    } finally {
-      setOrderActionLoading(false)
-      setOrderAction(null)
-    }
+      await api.patch(`/admin/finance/acts/${id}/orders/${orderId}`, {
+        finalStatus: action === 'approve' ? 'APPROVED' : action === 'reject' ? 'REJECTED' : 'HOLD',
+        rejectReason: reason,
+        syncConversionStatus: true,
+      })
+      await Promise.all([loadOrders(), loadRecon()])
+    } catch (err: any) { alert(err.response?.data?.error || 'Action failed') }
+    finally { setOrderActionLoading(false); setOrderAction(null) }
+  }
+
+  async function handleSyncAll() {
+    setSyncing(true)
+    try {
+      const { data } = await api.post(`/admin/finance/acts/${id}/sync-statuses`)
+      alert(`Synced ${data.synced} conversion statuses`)
+      await loadRecon()
+    } catch (err: any) { alert(err.response?.data?.error || 'Sync failed') }
+    finally { setSyncing(false) }
   }
 
   async function handleCreateInvoice(e: React.FormEvent) {
-    e.preventDefault()
-    setInvoiceSaving(true)
-    setInvoiceError('')
+    e.preventDefault(); setInvoiceSaving(true); setInvoiceError('')
     try {
       await api.post(`/admin/finance/acts/${id}/invoice`, {
-        invoiceDate: invoiceForm.invoiceDate,
-        dueDate: invoiceForm.dueDate,
-        amount: parseFloat(invoiceForm.amount),
-        currency: invoiceForm.currency || act?.currency,
-        notes: invoiceForm.notes || undefined,
+        invoiceDate: invoiceForm.invoiceDate, dueDate: invoiceForm.dueDate,
+        amount: parseFloat(invoiceForm.amount), currency: invoiceForm.currency || act?.currency, notes: invoiceForm.notes || undefined,
       })
-      setShowInvoiceModal(false)
-      setInvoiceForm(BLANK_INVOICE)
-      await loadAct()
-    } catch (err: any) {
-      setInvoiceError(err.response?.data?.error || 'Failed to create invoice')
-    } finally {
-      setInvoiceSaving(false)
-    }
+      setShowInvoiceModal(false); setInvoiceForm(BLANK_INVOICE); await loadAct()
+    } catch (err: any) { setInvoiceError(err.response?.data?.error || 'Failed to create invoice') }
+    finally { setInvoiceSaving(false) }
   }
 
   async function handleRecordPayment(e: React.FormEvent) {
-    e.preventDefault()
-    if (!act?.invoice) return
-    setPaymentSaving(true)
-    setPaymentError('')
+    e.preventDefault(); if (!act?.invoice) return
+    setPaymentSaving(true); setPaymentError('')
     try {
       await api.post(`/admin/finance/invoices/${act.invoice.id}/payments`, {
-        amount: parseFloat(paymentForm.amount),
-        currency: paymentForm.currency || act.currency,
-        paymentDate: paymentForm.paymentDate,
-        paymentMethod: paymentForm.paymentMethod,
-        transactionReference: paymentForm.transactionReference || undefined,
-        notes: paymentForm.notes || undefined,
+        amount: parseFloat(paymentForm.amount), currency: paymentForm.currency || act.currency,
+        paymentDate: paymentForm.paymentDate, paymentMethod: paymentForm.paymentMethod,
+        transactionReference: paymentForm.transactionReference || undefined, notes: paymentForm.notes || undefined,
       })
-      setShowPaymentModal(false)
-      setPaymentForm(BLANK_PAYMENT)
-      await loadAct()
-    } catch (err: any) {
-      setPaymentError(err.response?.data?.error || 'Failed to record payment')
-    } finally {
-      setPaymentSaving(false)
-    }
+      setShowPaymentModal(false); setPaymentForm(BLANK_PAYMENT); await loadAct()
+    } catch (err: any) { setPaymentError(err.response?.data?.error || 'Failed to record payment') }
+    finally { setPaymentSaving(false) }
   }
 
-  if (actLoading) {
-    return (
-      <div className="p-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-64" />
-          <div className="h-40 bg-gray-200 rounded-xl" />
-          <div className="h-64 bg-gray-200 rounded-xl" />
-        </div>
-      </div>
-    )
-  }
-
-  if (actError || !act) {
-    return (
-      <div className="p-6">
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{actError || 'Act not found'}</div>
-        <button onClick={() => router.back()} className="mt-4 text-sm text-gray-500 hover:text-gray-700">← Back</button>
-      </div>
-    )
-  }
+  if (actLoading) return (
+    <div className="p-6"><div className="animate-pulse space-y-4"><div className="h-8 bg-gray-200 rounded w-64" /><div className="h-40 bg-gray-200 rounded-xl" /><div className="h-64 bg-gray-200 rounded-xl" /></div></div>
+  )
+  if (actError || !act) return (
+    <div className="p-6"><div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{actError || 'Act not found'}</div><button onClick={() => router.back()} className="mt-4 text-sm text-gray-500 hover:text-gray-700">← Back</button></div>
+  )
 
   const isLocked = ['LOCKED', 'INVOICE_SENT', 'PAYMENT_PENDING', 'PAID', 'CLOSED'].includes(act.status)
   const ordersTotal = ordersData.total || orders.length
   const ordersPages = Math.ceil(ordersTotal / ordersLimit)
+  const hasDiscrepancy = recon && (recon.unmatchedCsvOrders > 0 || recon.unmatchedConversions > 0 || recon.revenueMismatchCount > 0)
+  const isFullyReconciled = recon && recon.totalCsvOrders > 0 && !hasDiscrepancy
 
   return (
     <div className="p-6 space-y-6">
@@ -310,9 +268,7 @@ export default function ActDetailPage() {
         <h1 className="text-xl font-bold text-gray-900">Act: <span className="font-mono">{act.actCode}</span></h1>
       </div>
 
-      {actionError && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{actionError}</div>
-      )}
+      {actionError && <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{actionError}</div>}
 
       {/* Act Summary */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -320,49 +276,23 @@ export default function ActDetailPage() {
           <h2 className="text-base font-semibold text-gray-900">Act Summary</h2>
           <div className="flex gap-2 items-center">
             {statusBadge(act.status)}
-            {act.advPaymentStatus && (
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">{act.advPaymentStatus}</span>
-            )}
+            {act.advPaymentStatus && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">{act.advPaymentStatus}</span>}
           </div>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-          <div>
-            <p className="text-xs text-gray-500 mb-0.5">Advertiser</p>
-            <p className="text-sm font-medium text-gray-900">{act.advertiser?.name}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-0.5">Offer</p>
-            <p className="text-sm font-medium text-gray-900">{act.offer?.name}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-0.5">Period</p>
-            <p className="text-sm font-medium text-gray-900">
-              {act.periodStart?.slice(0, 10)} – {act.periodEnd?.slice(0, 10)}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-0.5">Currency</p>
-            <p className="text-sm font-medium text-gray-900">{act.currency}</p>
-          </div>
+          <div><p className="text-xs text-gray-500 mb-0.5">Advertiser</p><p className="text-sm font-medium text-gray-900">{act.advertiser?.name}</p></div>
+          <div><p className="text-xs text-gray-500 mb-0.5">Offer</p><p className="text-sm font-medium text-gray-900">{act.offer?.name}</p></div>
+          <div><p className="text-xs text-gray-500 mb-0.5">Period</p><p className="text-sm font-medium text-gray-900">{act.periodStart?.slice(0, 10)} – {act.periodEnd?.slice(0, 10)}</p></div>
+          <div><p className="text-xs text-gray-500 mb-0.5">Currency</p><p className="text-sm font-medium text-gray-900">{act.currency}</p></div>
         </div>
 
         <div className="grid grid-cols-3 gap-4 mb-5">
-          <div className="bg-gray-50 rounded-lg p-3">
-            <p className="text-xs text-gray-500 mb-0.5">Total Revenue</p>
-            <p className="text-lg font-bold text-gray-900">{fmtMoney(act.totalRevenue || 0, act.currency)}</p>
-          </div>
-          <div className="bg-gray-50 rounded-lg p-3">
-            <p className="text-xs text-gray-500 mb-0.5">Total Payout</p>
-            <p className="text-lg font-bold text-gray-900">{fmtMoney(act.totalPayout || 0, act.currency)}</p>
-          </div>
-          <div className="bg-green-50 rounded-lg p-3">
-            <p className="text-xs text-gray-500 mb-0.5">Total Margin</p>
-            <p className="text-lg font-bold text-green-700">{fmtMoney(act.totalMargin || 0, act.currency)}</p>
-          </div>
+          <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500 mb-0.5">Total Revenue</p><p className="text-lg font-bold text-gray-900">{fmtMoney(act.totalRevenue || 0, act.currency)}</p></div>
+          <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500 mb-0.5">Total Payout</p><p className="text-lg font-bold text-gray-900">{fmtMoney(act.totalPayout || 0, act.currency)}</p></div>
+          <div className="bg-green-50 rounded-lg p-3"><p className="text-xs text-gray-500 mb-0.5">Total Margin</p><p className="text-lg font-bold text-green-700">{fmtMoney(act.totalMargin || 0, act.currency)}</p></div>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex gap-2 flex-wrap">
           {(act.status === 'DRAFT' || act.status === 'UPLOADED') && (
             <label className={`inline-flex items-center gap-1.5 text-sm border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded-lg font-medium cursor-pointer ${uploadLoading ? 'opacity-50' : ''}`}>
@@ -371,37 +301,131 @@ export default function ActDetailPage() {
             </label>
           )}
           {['UPLOADED', 'RECONCILED'].includes(act.status) && (
-            <button onClick={() => doAction('approve')} disabled={actionLoading}
-              className="text-sm bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg font-medium">
+            <button onClick={() => doAction('approve')} disabled={actionLoading} className="text-sm bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg font-medium">
               {actionLoading ? 'Processing...' : 'Approve Act'}
             </button>
           )}
           {act.status === 'APPROVED' && (
-            <button onClick={() => doAction('lock')} disabled={actionLoading}
-              className="text-sm bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg font-medium">
+            <button onClick={() => doAction('lock')} disabled={actionLoading} className="text-sm bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg font-medium">
               {actionLoading ? 'Processing...' : 'Lock Act'}
             </button>
           )}
           {['APPROVED', 'LOCKED'].includes(act.status) && !act.invoice && (
             <button onClick={() => { setShowInvoiceModal(true); setInvoiceForm({ ...BLANK_INVOICE, currency: act.currency, amount: String(act.totalRevenue || '') }); setInvoiceError('') }}
-              className="text-sm bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg font-medium">
-              Create Invoice
+              className="text-sm bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg font-medium">Create Invoice</button>
+          )}
+          {recon && recon.totalCsvOrders > 0 && !isLocked && (
+            <button onClick={handleSyncAll} disabled={syncing} className="text-sm border border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50 px-3 py-1.5 rounded-lg font-medium">
+              {syncing ? 'Syncing...' : 'Sync All Statuses'}
             </button>
           )}
         </div>
 
-        {/* Upload result */}
         {(uploadResult || uploadError) && (
           <div className={`mt-3 rounded-lg p-3 text-sm ${uploadError ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
             {uploadError ? uploadError : (
               <div>
                 <p className="font-medium">Upload complete: {uploadResult?.matched ?? 0} matched, {uploadResult?.unmatched ?? 0} unmatched</p>
-                {uploadResult?.errors?.map((e, i) => <p key={i} className="text-xs mt-1 text-red-600">{e}</p>)}
+                {(uploadResult?.unmatchedConversions ?? 0) > 0 && (
+                  <p className="text-xs mt-1 text-yellow-700">{uploadResult?.unmatchedConversions} conversion(s) trong hệ thống không có trong CSV advertiser</p>
+                )}
               </div>
             )}
           </div>
         )}
       </div>
+
+      {/* Reconciliation Health */}
+      {recon && recon.totalCsvOrders > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold text-gray-900">Reconciliation Health</h2>
+            {isFullyReconciled && (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">Fully Reconciled</span>
+            )}
+            {hasDiscrepancy && (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">Needs Review</span>
+            )}
+          </div>
+
+          {/* Match Status */}
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="bg-green-50 rounded-lg p-3 border border-green-100">
+              <p className="text-xs text-green-600 mb-0.5 font-medium">Matched</p>
+              <p className="text-xl font-bold text-green-700">{recon.matchedOrders}</p>
+              <p className="text-[10px] text-green-500">CSV orders matched conversion</p>
+            </div>
+            <div className={`rounded-lg p-3 border ${recon.unmatchedCsvOrders > 0 ? 'bg-orange-50 border-orange-100' : 'bg-gray-50 border-gray-100'}`}>
+              <p className={`text-xs mb-0.5 font-medium ${recon.unmatchedCsvOrders > 0 ? 'text-orange-600' : 'text-gray-500'}`}>Unmatched (CSV)</p>
+              <p className={`text-xl font-bold ${recon.unmatchedCsvOrders > 0 ? 'text-orange-700' : 'text-gray-400'}`}>{recon.unmatchedCsvOrders}</p>
+              <p className="text-[10px] text-gray-400">CSV orders without conversion</p>
+            </div>
+            <div className={`rounded-lg p-3 border ${recon.unmatchedConversions > 0 ? 'bg-red-50 border-red-100' : 'bg-gray-50 border-gray-100'}`}>
+              <p className={`text-xs mb-0.5 font-medium ${recon.unmatchedConversions > 0 ? 'text-red-600' : 'text-gray-500'}`}>Missing from CSV</p>
+              <p className={`text-xl font-bold ${recon.unmatchedConversions > 0 ? 'text-red-700' : 'text-gray-400'}`}>{recon.unmatchedConversions}</p>
+              <p className="text-[10px] text-gray-400">Our conversions not in advertiser data</p>
+            </div>
+          </div>
+
+          {/* Revenue & Payout Comparison */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="bg-gray-50 rounded-lg p-3">
+              <p className="text-xs text-gray-500 mb-2 font-medium">Revenue Comparison (matched only)</p>
+              <div className="flex items-end justify-between">
+                <div>
+                  <p className="text-[10px] text-gray-400">Tracked</p>
+                  <p className="text-sm font-bold text-gray-700">{fmtMoney(recon.totalTrackedRevenue, act.currency)}</p>
+                </div>
+                <span className="text-gray-300 text-lg">vs</span>
+                <div className="text-right">
+                  <p className="text-[10px] text-gray-400">Advertiser</p>
+                  <p className="text-sm font-bold text-gray-700">{fmtMoney(recon.totalAdvertiserRevenue, act.currency)}</p>
+                </div>
+              </div>
+              {recon.revenueDelta !== 0 && (
+                <p className={`text-xs mt-1 font-medium ${recon.revenueDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  Delta: {recon.revenueDelta > 0 ? '+' : ''}{fmtMoney(recon.revenueDelta, act.currency)}
+                  {recon.revenueMismatchCount > 0 && ` (${recon.revenueMismatchCount} mismatched)`}
+                </p>
+              )}
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <p className="text-xs text-gray-500 mb-2 font-medium">Payout Comparison (matched only)</p>
+              <div className="flex items-end justify-between">
+                <div>
+                  <p className="text-[10px] text-gray-400">Commission (tracked)</p>
+                  <p className="text-sm font-bold text-gray-700">{fmtMoney(recon.totalTrackedPayout, act.currency)}</p>
+                </div>
+                <span className="text-gray-300 text-lg">vs</span>
+                <div className="text-right">
+                  <p className="text-[10px] text-gray-400">Payout (advertiser)</p>
+                  <p className="text-sm font-bold text-gray-700">{fmtMoney(recon.totalAdvertiserPayout, act.currency)}</p>
+                </div>
+              </div>
+              {recon.payoutDelta !== 0 && (
+                <p className={`text-xs mt-1 font-medium ${recon.payoutDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  Delta: {recon.payoutDelta > 0 ? '+' : ''}{fmtMoney(recon.payoutDelta, act.currency)}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Status Conflicts */}
+          {(recon.byTrackingVsAdvertiser.trackingApprovedAdvRejected > 0 || recon.byTrackingVsAdvertiser.trackingRejectedAdvApproved > 0) && (
+            <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
+              <p className="text-xs text-amber-700 font-medium mb-1">Status Conflicts</p>
+              <div className="flex gap-4 text-xs text-amber-600">
+                {recon.byTrackingVsAdvertiser.trackingApprovedAdvRejected > 0 && (
+                  <span>{recon.byTrackingVsAdvertiser.trackingApprovedAdvRejected} orders: We approved → Adv rejected</span>
+                )}
+                {recon.byTrackingVsAdvertiser.trackingRejectedAdvApproved > 0 && (
+                  <span>{recon.byTrackingVsAdvertiser.trackingRejectedAdvApproved} orders: We rejected → Adv approved</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Orders Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -417,7 +441,15 @@ export default function ActDetailPage() {
               </div>
             )}
           </div>
-          <span className="text-sm text-gray-500">{ordersTotal} total</span>
+          <div className="flex items-center gap-3">
+            <select value={ordersFilter} onChange={e => { setOrdersFilter(e.target.value); setOrdersPage(1) }}
+              className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
+              <option value="all">All</option>
+              <option value="matched">Matched</option>
+              <option value="unmatched">Unmatched (CSV only)</option>
+            </select>
+            <span className="text-sm text-gray-500">{ordersTotal} total</span>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -433,62 +465,57 @@ export default function ActDetailPage() {
                 <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">Loading orders...</td></tr>
               ) : orders.length === 0 ? (
                 <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">No orders found. Upload a CSV to populate orders.</td></tr>
-              ) : orders.map((order, idx) => (
-                <tr key={order.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2.5 text-gray-400 text-xs">{(ordersPage - 1) * ordersLimit + idx + 1}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-gray-900">{order.orderId}</td>
-                  <td className="px-4 py-2.5 text-gray-700">{order.publisher?.name || '—'}</td>
-                  <td className="px-4 py-2.5">{orderStatusBadge(order.trackingStatus, 'tracking')}</td>
-                  <td className="px-4 py-2.5">{orderStatusBadge(order.advertiserStatus, 'adv')}</td>
-                  <td className="px-4 py-2.5">{orderStatusBadge(order.finalStatus, 'final')}</td>
-                  <td className="px-4 py-2.5">{orderStatusBadge(order.paymentStatus, 'payment')}</td>
-                  <td className="px-4 py-2.5 text-gray-900">{fmtMoney(order.revenue || 0, act.currency)}</td>
-                  <td className="px-4 py-2.5 text-gray-900">{fmtMoney(order.payout || 0, act.currency)}</td>
-                  <td className="px-4 py-2.5 text-green-700">{fmtMoney(order.margin || 0, act.currency)}</td>
-                  {!isLocked && (
-                    <td className="px-4 py-2.5">
-                      {orderAction?.id === order.id ? (
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            autoFocus
-                            type="text"
-                            placeholder={`Reason for ${orderAction.type}...`}
-                            value={orderAction.reason}
-                            onChange={(e) => setOrderAction({ ...orderAction, reason: e.target.value })}
-                            className="border border-gray-300 rounded px-2 py-1 text-xs w-36 focus:outline-none focus:ring-1 focus:ring-orange-500"
-                          />
-                          <button
-                            onClick={() => handleOrderAction(order.id, orderAction.type, orderAction.reason)}
-                            disabled={orderActionLoading}
-                            className="text-xs bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white px-2 py-1 rounded">
-                            OK
-                          </button>
-                          <button onClick={() => setOrderAction(null)} className="text-xs text-gray-400 hover:text-gray-600 px-1">✕</button>
-                        </div>
-                      ) : (
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => handleOrderAction(order.id, 'approve')}
-                            disabled={orderActionLoading}
-                            className="text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-2 py-1 rounded font-medium">
-                            ✓
-                          </button>
-                          <button
-                            onClick={() => setOrderAction({ id: order.id, type: 'reject', reason: '' })}
-                            className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded font-medium">
-                            ✕
-                          </button>
-                          <button
-                            onClick={() => setOrderAction({ id: order.id, type: 'hold', reason: '' })}
-                            className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-2 py-1 rounded font-medium">
-                            ~
-                          </button>
-                        </div>
+              ) : orders.map((order, idx) => {
+                const isUnmatched = !order.conversionId
+                const hasRevenueMismatch = order.conversion && Math.abs(order.conversion.revenue - order.revenue) >= 0.01
+                return (
+                  <tr key={order.id} className={`hover:bg-gray-50 ${isUnmatched ? 'bg-orange-50/50' : ''}`}>
+                    <td className="px-4 py-2.5 text-gray-400 text-xs">{(ordersPage - 1) * ordersLimit + idx + 1}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs text-gray-900">
+                      {order.orderId}
+                      {isUnmatched && <span className="ml-1 text-[9px] text-orange-500 font-sans">(no match)</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-700">{order.publisher?.name || '—'}</td>
+                    <td className="px-4 py-2.5">{orderStatusBadge(order.trackingStatus)}</td>
+                    <td className="px-4 py-2.5">{orderStatusBadge(order.advertiserStatus)}</td>
+                    <td className="px-4 py-2.5">{orderStatusBadge(order.finalStatus)}</td>
+                    <td className="px-4 py-2.5">{orderStatusBadge(order.paymentStatus)}</td>
+                    <td className="px-4 py-2.5 text-gray-900">
+                      {fmtMoney(order.revenue || 0, act.currency)}
+                      {hasRevenueMismatch && (
+                        <span className="block text-[9px] text-red-500" title={`Tracked: ${fmtMoney(order.conversion!.revenue, act.currency)}`}>
+                          tracked: {fmtMoney(order.conversion!.revenue, act.currency)}
+                        </span>
                       )}
                     </td>
-                  )}
-                </tr>
-              ))}
+                    <td className="px-4 py-2.5 text-gray-900">{fmtMoney(order.payout || 0, act.currency)}</td>
+                    <td className="px-4 py-2.5 text-green-700">{fmtMoney(order.margin || 0, act.currency)}</td>
+                    {!isLocked && (
+                      <td className="px-4 py-2.5">
+                        {orderAction?.id === order.id ? (
+                          <div className="flex items-center gap-1.5">
+                            <input autoFocus type="text" placeholder={`Reason...`} value={orderAction.reason}
+                              onChange={(e) => setOrderAction({ ...orderAction, reason: e.target.value })}
+                              className="border border-gray-300 rounded px-2 py-1 text-xs w-36 focus:outline-none focus:ring-1 focus:ring-orange-500" />
+                            <button onClick={() => handleOrderAction(order.id, orderAction.type, orderAction.reason)} disabled={orderActionLoading}
+                              className="text-xs bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white px-2 py-1 rounded">OK</button>
+                            <button onClick={() => setOrderAction(null)} className="text-xs text-gray-400 hover:text-gray-600 px-1">✕</button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-1">
+                            <button onClick={() => handleOrderAction(order.id, 'approve')} disabled={orderActionLoading}
+                              className="text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-2 py-1 rounded font-medium">✓</button>
+                            <button onClick={() => setOrderAction({ id: order.id, type: 'reject', reason: '' })}
+                              className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded font-medium">✕</button>
+                            <button onClick={() => setOrderAction({ id: order.id, type: 'hold', reason: '' })}
+                              className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-2 py-1 rounded font-medium">~</button>
+                          </div>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -506,6 +533,43 @@ export default function ActDetailPage() {
         )}
       </div>
 
+      {/* Unmatched Conversions Panel */}
+      {recon && recon.unmatchedConversions > 0 && (
+        <div className="bg-white rounded-xl border border-red-200 overflow-hidden">
+          <button onClick={() => setShowUnmatched(!showUnmatched)}
+            className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-red-50/50 transition-colors">
+            <div>
+              <h2 className="text-base font-semibold text-red-700">Conversions Missing from Advertiser Report</h2>
+              <p className="text-xs text-red-500 mt-0.5">{recon.unmatchedConversions} conversion(s) có trong hệ thống nhưng advertiser không báo</p>
+            </div>
+            <span className="text-gray-400 text-lg">{showUnmatched ? '▲' : '▼'}</span>
+          </button>
+          {showUnmatched && (
+            <div className="overflow-x-auto border-t border-red-100">
+              <table className="w-full text-sm">
+                <thead className="bg-red-50 text-red-600 text-xs uppercase">
+                  <tr>
+                    {['Source Ref ID', 'Revenue', 'Commission', 'Status'].map(h => (
+                      <th key={h} className="px-4 py-2 text-left font-medium">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-red-50">
+                  {recon.unmatchedConversionsList.map(c => (
+                    <tr key={c.id} className="hover:bg-red-50/30">
+                      <td className="px-4 py-2.5 font-mono text-xs text-gray-900">{c.sourceRefId || '—'}</td>
+                      <td className="px-4 py-2.5 text-gray-700">{fmtMoney(c.revenue, c.currency)}</td>
+                      <td className="px-4 py-2.5 text-green-700">{fmtMoney(c.commissionAmount, c.currency)}</td>
+                      <td className="px-4 py-2.5">{orderStatusBadge(c.status)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Invoice Section */}
       {act.invoice && (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -520,38 +584,18 @@ export default function ActDetailPage() {
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">Invoice Number</p>
-              <p className="text-sm font-medium text-gray-900">{act.invoice.invoiceNumber}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">Invoice Date</p>
-              <p className="text-sm font-medium text-gray-900">{act.invoice.invoiceDate?.slice(0, 10)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">Due Date</p>
-              <p className="text-sm font-medium text-gray-900">{act.invoice.dueDate?.slice(0, 10)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">Amount</p>
-              <p className="text-sm font-bold text-gray-900">{fmtMoney(act.invoice.amount, act.invoice.currency)}</p>
-            </div>
+            <div><p className="text-xs text-gray-500 mb-0.5">Invoice Number</p><p className="text-sm font-medium text-gray-900">{act.invoice.invoiceNumber}</p></div>
+            <div><p className="text-xs text-gray-500 mb-0.5">Invoice Date</p><p className="text-sm font-medium text-gray-900">{act.invoice.invoiceDate?.slice(0, 10)}</p></div>
+            <div><p className="text-xs text-gray-500 mb-0.5">Due Date</p><p className="text-sm font-medium text-gray-900">{act.invoice.dueDate?.slice(0, 10)}</p></div>
+            <div><p className="text-xs text-gray-500 mb-0.5">Amount</p><p className="text-sm font-bold text-gray-900">{fmtMoney(act.invoice.amount, act.invoice.currency)}</p></div>
           </div>
 
           {act.invoice.fileUrl && (
-            <a href={act.invoice.fileUrl} target="_blank" rel="noopener noreferrer"
-              className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-4">
-              View Invoice File
-            </a>
+            <a href={act.invoice.fileUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-4">View Invoice File</a>
           )}
+          <button onClick={() => { setShowPaymentModal(true); setPaymentForm({ ...BLANK_PAYMENT, currency: act.currency }); setPaymentError('') }}
+            className="text-sm bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg font-medium mt-2">Record Payment</button>
 
-          <button
-            onClick={() => { setShowPaymentModal(true); setPaymentForm({ ...BLANK_PAYMENT, currency: act.currency }); setPaymentError('') }}
-            className="text-sm bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg font-medium mt-2">
-            Record Payment
-          </button>
-
-          {/* Recorded Payments */}
           {act.invoice.payments && act.invoice.payments.length > 0 && (
             <div className="mt-4">
               <p className="text-sm font-medium text-gray-700 mb-2">Recorded Payments</p>
@@ -574,58 +618,30 @@ export default function ActDetailPage() {
 
       {/* Create Invoice Modal */}
       {showInvoiceModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => setShowInvoiceModal(false)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowInvoiceModal(false)}>
           <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-gray-900">Create Invoice</h2>
               <button onClick={() => setShowInvoiceModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
             </div>
-
-            {invoiceError && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700">{invoiceError}</div>
-            )}
-
+            {invoiceError && <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700">{invoiceError}</div>}
             <form onSubmit={handleCreateInvoice} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Date <span className="text-red-500">*</span></label>
-                  <input required type="date" value={invoiceForm.invoiceDate}
-                    onChange={(e) => setInvoiceForm({ ...invoiceForm, invoiceDate: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Due Date <span className="text-red-500">*</span></label>
-                  <input required type="date" value={invoiceForm.dueDate}
-                    onChange={(e) => setInvoiceForm({ ...invoiceForm, dueDate: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-                </div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Invoice Date <span className="text-red-500">*</span></label>
+                  <input required type="date" value={invoiceForm.invoiceDate} onChange={(e) => setInvoiceForm({ ...invoiceForm, invoiceDate: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Due Date <span className="text-red-500">*</span></label>
+                  <input required type="date" value={invoiceForm.dueDate} onChange={(e) => setInvoiceForm({ ...invoiceForm, dueDate: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount <span className="text-red-500">*</span></label>
-                  <input required type="number" step="0.01" min="0" value={invoiceForm.amount}
-                    onChange={(e) => setInvoiceForm({ ...invoiceForm, amount: e.target.value })}
-                    placeholder="0.00"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
-                  <input value={invoiceForm.currency || act.currency}
-                    onChange={(e) => setInvoiceForm({ ...invoiceForm, currency: e.target.value.toUpperCase() })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-                </div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Amount <span className="text-red-500">*</span></label>
+                  <input required type="number" step="0.01" min="0" value={invoiceForm.amount} onChange={(e) => setInvoiceForm({ ...invoiceForm, amount: e.target.value })} placeholder="0.00" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                  <input value={invoiceForm.currency || act.currency} onChange={(e) => setInvoiceForm({ ...invoiceForm, currency: e.target.value.toUpperCase() })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" /></div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea value={invoiceForm.notes} rows={3}
-                  onChange={(e) => setInvoiceForm({ ...invoiceForm, notes: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-              </div>
-              <button type="submit" disabled={invoiceSaving}
-                className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm">
-                {invoiceSaving ? 'Creating...' : 'Create Invoice'}
-              </button>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea value={invoiceForm.notes} rows={3} onChange={(e) => setInvoiceForm({ ...invoiceForm, notes: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" /></div>
+              <button type="submit" disabled={invoiceSaving} className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm">
+                {invoiceSaving ? 'Creating...' : 'Create Invoice'}</button>
             </form>
           </div>
         </div>
@@ -633,66 +649,32 @@ export default function ActDetailPage() {
 
       {/* Record Payment Modal */}
       {showPaymentModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => setShowPaymentModal(false)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowPaymentModal(false)}>
           <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-gray-900">Record Payment</h2>
               <button onClick={() => setShowPaymentModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
             </div>
-
-            {paymentError && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700">{paymentError}</div>
-            )}
-
+            {paymentError && <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700">{paymentError}</div>}
             <form onSubmit={handleRecordPayment} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount <span className="text-red-500">*</span></label>
-                  <input required type="number" step="0.01" min="0" value={paymentForm.amount}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                    placeholder="0.00"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
-                  <input value={paymentForm.currency || act.currency}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, currency: e.target.value.toUpperCase() })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-                </div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Amount <span className="text-red-500">*</span></label>
+                  <input required type="number" step="0.01" min="0" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} placeholder="0.00" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                  <input value={paymentForm.currency || act.currency} onChange={(e) => setPaymentForm({ ...paymentForm, currency: e.target.value.toUpperCase() })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Payment Date <span className="text-red-500">*</span></label>
-                  <input required type="date" value={paymentForm.paymentDate}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, paymentDate: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Method <span className="text-red-500">*</span></label>
-                  <input required value={paymentForm.paymentMethod}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, paymentMethod: e.target.value })}
-                    placeholder="Wire / PayPal / ..."
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-                </div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Payment Date <span className="text-red-500">*</span></label>
+                  <input required type="date" value={paymentForm.paymentDate} onChange={(e) => setPaymentForm({ ...paymentForm, paymentDate: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Method <span className="text-red-500">*</span></label>
+                  <input required value={paymentForm.paymentMethod} onChange={(e) => setPaymentForm({ ...paymentForm, paymentMethod: e.target.value })} placeholder="Wire / PayPal / ..." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" /></div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Reference</label>
-                <input value={paymentForm.transactionReference}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, transactionReference: e.target.value })}
-                  placeholder="TXN-..."
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea value={paymentForm.notes} rows={2}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-              </div>
-              <button type="submit" disabled={paymentSaving}
-                className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm">
-                {paymentSaving ? 'Recording...' : 'Record Payment'}
-              </button>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Transaction Reference</label>
+                <input value={paymentForm.transactionReference} onChange={(e) => setPaymentForm({ ...paymentForm, transactionReference: e.target.value })} placeholder="TXN-..." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" /></div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea value={paymentForm.notes} rows={2} onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" /></div>
+              <button type="submit" disabled={paymentSaving} className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm">
+                {paymentSaving ? 'Recording...' : 'Record Payment'}</button>
             </form>
           </div>
         </div>

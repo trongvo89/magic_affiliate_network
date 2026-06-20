@@ -229,7 +229,10 @@ export default async function financeAdminRoutes(server: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params
 
-      const act = await prisma.settlementAct.findUnique({ where: { id } })
+      const act = await prisma.settlementAct.findUnique({
+        where: { id },
+        select: { id: true, status: true, offerId: true, currency: true, periodStart: true, periodEnd: true },
+      })
       if (!act) return reply.code(404).send({ error: 'Act not found' })
       if (!['DRAFT', 'UPLOADED'].includes(act.status)) {
         return reply.code(409).send({ error: 'Act must be in DRAFT or UPLOADED status' })
@@ -358,22 +361,124 @@ export default async function financeAdminRoutes(server: FastifyInstance) {
       await prisma.settlementAct.update({ where: { id }, data: updateData })
       await recalcActTotals(prisma, id)
 
+      const linkedIds = createdOrders.filter(o => o.conversionId).map(o => o.conversionId)
+      const unmatchedConversions = await prisma.conversion.count({
+        where: {
+          offerId: act.offerId,
+          eventAt: { gte: act.periodStart, lte: act.periodEnd },
+          id: { notIn: linkedIds },
+        },
+      })
+
       return {
         matched,
         unmatched,
+        unmatchedConversions,
         total: rows.length,
         orders: createdOrders.slice(0, 100),
       }
     }
   )
 
+  // ─── Reconciliation Summary ────────────────────────────────────────────────
+
+  server.get<{ Params: { id: string } }>(
+    '/admin/finance/acts/:id/reconciliation-summary',
+    async (request, reply) => {
+      const { id } = request.params
+      const act = await prisma.settlementAct.findUnique({
+        where: { id },
+        select: { id: true, offerId: true, periodStart: true, periodEnd: true },
+      })
+      if (!act) return reply.code(404).send({ error: 'Act not found' })
+
+      const allOrders = await prisma.actOrder.findMany({
+        where: { actId: id },
+        include: { conversion: { select: { revenue: true, commissionAmount: true, status: true } } },
+      })
+
+      const matchedOrders = allOrders.filter(o => o.conversionId != null)
+      const unmatchedCsvOrders = allOrders.filter(o => o.conversionId == null)
+
+      const linkedConversionIds = matchedOrders.map(o => o.conversionId!).filter(Boolean)
+      const unmatchedConversions = await prisma.conversion.findMany({
+        where: {
+          offerId: act.offerId,
+          eventAt: { gte: act.periodStart, lte: act.periodEnd },
+          id: { notIn: linkedConversionIds },
+        },
+        select: { id: true, sourceRefId: true, revenue: true, commissionAmount: true, status: true, currency: true, publisherId: true },
+        take: 100,
+      })
+      const unmatchedConvCount = await prisma.conversion.count({
+        where: {
+          offerId: act.offerId,
+          eventAt: { gte: act.periodStart, lte: act.periodEnd },
+          id: { notIn: linkedConversionIds },
+        },
+      })
+
+      let totalTrackedRevenue = 0
+      let totalAdvertiserRevenue = 0
+      let totalTrackedPayout = 0
+      let totalAdvertiserPayout = 0
+      let revenueMatchCount = 0
+      let revenueMismatchCount = 0
+      let bothApproved = 0
+      let trackingApprovedAdvRejected = 0
+      let trackingRejectedAdvApproved = 0
+      let otherMismatch = 0
+
+      const byFinalStatus: Record<string, number> = { APPROVED: 0, REJECTED: 0, PENDING: 0, HOLD: 0 }
+
+      for (const order of allOrders) {
+        byFinalStatus[order.finalStatus] = (byFinalStatus[order.finalStatus] || 0) + 1
+
+        if (order.conversion) {
+          totalTrackedRevenue += order.conversion.revenue
+          totalAdvertiserRevenue += order.revenue
+          totalTrackedPayout += order.conversion.commissionAmount
+          totalAdvertiserPayout += order.payout
+
+          if (Math.abs(order.conversion.revenue - order.revenue) < 0.01) revenueMatchCount++
+          else revenueMismatchCount++
+
+          const ts = order.trackingStatus
+          const fs = order.finalStatus
+          if (ts === 'APPROVED' && fs === 'APPROVED') bothApproved++
+          else if (ts === 'APPROVED' && fs === 'REJECTED') trackingApprovedAdvRejected++
+          else if (ts === 'REJECTED' && fs === 'APPROVED') trackingRejectedAdvApproved++
+          else if (ts !== fs) otherMismatch++
+        }
+      }
+
+      return {
+        totalCsvOrders: allOrders.length,
+        matchedOrders: matchedOrders.length,
+        unmatchedCsvOrders: unmatchedCsvOrders.length,
+        unmatchedConversions: unmatchedConvCount,
+        unmatchedConversionsList: unmatchedConversions,
+        revenueMatchCount,
+        revenueMismatchCount,
+        totalTrackedRevenue: parseFloat(totalTrackedRevenue.toFixed(2)),
+        totalAdvertiserRevenue: parseFloat(totalAdvertiserRevenue.toFixed(2)),
+        revenueDelta: parseFloat((totalAdvertiserRevenue - totalTrackedRevenue).toFixed(2)),
+        totalTrackedPayout: parseFloat(totalTrackedPayout.toFixed(2)),
+        totalAdvertiserPayout: parseFloat(totalAdvertiserPayout.toFixed(2)),
+        payoutDelta: parseFloat((totalAdvertiserPayout - totalTrackedPayout).toFixed(2)),
+        byFinalStatus,
+        byTrackingVsAdvertiser: { bothApproved, trackingApprovedAdvRejected, trackingRejectedAdvApproved, otherMismatch },
+      }
+    }
+  )
+
   // ─── Act Orders ───────────────────────────────────────────────────────────────
 
-  server.get<{ Params: { id: string }; Querystring: { page?: string; limit?: string; finalStatus?: string } }>(
+  server.get<{ Params: { id: string }; Querystring: { page?: string; limit?: string; finalStatus?: string; filter?: string } }>(
     '/admin/finance/acts/:id/orders',
     async (request, reply) => {
       const { id } = request.params
-      const { page = '1', limit = '50', finalStatus } = request.query
+      const { page = '1', limit = '50', finalStatus, filter } = request.query
 
       const act = await prisma.settlementAct.findUnique({ where: { id }, select: { id: true } })
       if (!act) return reply.code(404).send({ error: 'Act not found' })
@@ -381,8 +486,10 @@ export default async function financeAdminRoutes(server: FastifyInstance) {
       const skip = (parseInt(page) - 1) * parseInt(limit)
       const where: any = { actId: id }
       if (finalStatus) where.finalStatus = finalStatus
+      if (filter === 'matched') where.conversionId = { not: null }
+      if (filter === 'unmatched') where.conversionId = null
 
-      const [orders, total] = await Promise.all([
+      const [orders, total, statusCounts] = await Promise.all([
         prisma.actOrder.findMany({
           where,
           skip,
@@ -390,20 +497,38 @@ export default async function financeAdminRoutes(server: FastifyInstance) {
           orderBy: { createdAt: 'asc' },
           include: {
             publisher: { select: { id: true, name: true, email: true } },
+            conversion: { select: { revenue: true, commissionAmount: true, status: true } },
           },
         }),
         prisma.actOrder.count({ where }),
+        prisma.actOrder.groupBy({
+          by: ['finalStatus'],
+          where: { actId: id },
+          _count: true,
+        }),
       ])
 
-      return { orders, total, page: parseInt(page), limit: parseInt(limit) }
+      const counts: Record<string, number> = {}
+      for (const sc of statusCounts) counts[sc.finalStatus] = sc._count
+
+      return {
+        orders,
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        approvedCount: counts['APPROVED'] || 0,
+        rejectedCount: counts['REJECTED'] || 0,
+        holdCount: counts['HOLD'] || 0,
+        pendingCount: counts['PENDING'] || 0,
+      }
     }
   )
 
-  server.patch<{ Params: { id: string; orderId: string }; Body: { finalStatus: string; rejectReason?: string } }>(
+  server.patch<{ Params: { id: string; orderId: string }; Body: { finalStatus: string; rejectReason?: string; syncConversionStatus?: boolean } }>(
     '/admin/finance/acts/:id/orders/:orderId',
     async (request, reply) => {
       const { id, orderId } = request.params
-      const { finalStatus, rejectReason } = request.body
+      const { finalStatus, rejectReason, syncConversionStatus } = request.body
 
       const act = await prisma.settlementAct.findUnique({ where: { id }, select: { id: true, status: true } })
       if (!act) return reply.code(404).send({ error: 'Act not found' })
@@ -424,9 +549,41 @@ export default async function financeAdminRoutes(server: FastifyInstance) {
         },
       })
 
+      if (syncConversionStatus && order.conversionId && ['APPROVED', 'REJECTED'].includes(finalStatus)) {
+        await prisma.conversion.update({
+          where: { id: order.conversionId },
+          data: { status: finalStatus as any },
+        })
+      }
+
       await recalcActTotals(prisma, id)
 
       return updated
+    }
+  )
+
+  server.post<{ Params: { id: string } }>(
+    '/admin/finance/acts/:id/sync-statuses',
+    async (request, reply) => {
+      const { id } = request.params
+      const act = await prisma.settlementAct.findUnique({ where: { id }, select: { id: true, status: true } })
+      if (!act) return reply.code(404).send({ error: 'Act not found' })
+
+      const orders = await prisma.actOrder.findMany({
+        where: { actId: id, conversionId: { not: null }, finalStatus: { in: ['APPROVED', 'REJECTED'] } },
+        select: { conversionId: true, finalStatus: true },
+      })
+
+      let synced = 0
+      for (const o of orders) {
+        await prisma.conversion.update({
+          where: { id: o.conversionId! },
+          data: { status: o.finalStatus as any },
+        })
+        synced++
+      }
+
+      return { synced }
     }
   )
 
