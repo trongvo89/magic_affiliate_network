@@ -8,7 +8,7 @@ export function LogoMark({ size = 40 }: { size?: number }) {
       width={size}
       height={size}
       priority
-      style={{ objectFit: 'contain' }}
+      style={{ objectFit: 'contain', mixBlendMode: 'lighten' }}
     />
   )
 }
