@@ -71,7 +71,7 @@ export default function PublisherOffersPage() {
   function trackingLink(offerId: string) {
     if (typeof window === 'undefined') return ''
     const base = trackingBase || `${window.location.origin}/api-proxy`
-    return `${base}/click/cityads/${offerId}?pub=${pubId}`
+    return `${base}/click/t/${offerId}?pub=${pubId}`
   }
 
   function copyId(id: string) {

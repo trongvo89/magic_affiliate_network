@@ -80,7 +80,7 @@ export default function AdminSettingsPage() {
                 <CopyButton text={trackingDomain} />
               </div>
               <p className="text-xs text-gray-400 mt-2">
-                Tracking links của publisher sẽ có dạng: <code className="font-mono">{trackingDomain}/click/cityads/&#123;offerId&#125;?pub=&#123;pubId&#125;</code>
+                Tracking links của publisher sẽ có dạng: <code className="font-mono">{trackingDomain}/click/t/&#123;offerId&#125;?pub=&#123;pubId&#125;</code>
               </p>
             </div>
           ) : (

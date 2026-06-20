@@ -25,7 +25,7 @@ Publisher click link                  Advertiser/MMP bắn postback
         │                                      │
         ▼                                      ▼
 GET go.magicmedia.asia               GET/POST /postback/{source}
-  /click/cityads/{offerId}              ?xid=...&offer_id=...
+  /click/t/{offerId}              ?xid=...&offer_id=...
   ?pub={publisherId}                    &payout=...&sa={pubId}
         │                                      │
         ▼                                      ▼
@@ -88,7 +88,7 @@ https://magicaffiliatenetwork-production-6926.up.railway.app/postback/adjust?tra
 
 Publisher vào Portal → Offers → Copy tracking link:
 ```
-https://go.magicmedia.asia/click/cityads/{offerId}?pub={publisherId}
+https://go.magicmedia.asia/click/t/{offerId}?pub={publisherId}
 ```
 
 **Xong! Không cần code gì thêm.**
@@ -156,11 +156,7 @@ server.get('/postback/hasoffers', async (req, reply) => {
 ALTER TYPE "MmpSource" ADD VALUE 'HASOFFERS';
 ```
 
-4. **`api/src/routes/click.ts`** — Thêm click route nếu cần:
-```typescript
-server.get('/click/hasoffers/:offerId', async (req, reply) => {
-  // Tương tự /click/cityads/:offerId
-})
+4. **`api/src/routes/click.ts`** — Click route đã generic, dùng `/click/t/:offerId` cho tất cả MMP. Không cần thêm route mới.
 ```
 
 ### Thời gian ước tính:
@@ -261,7 +257,7 @@ https://magicaffiliatenetwork-production-6926.up.railway.app/postback/cityads?xi
 
 **3. Publisher tracking link:**
 ```
-https://go.magicmedia.asia/click/cityads/{offerId}?pub={publisherId}
+https://go.magicmedia.asia/click/t/{offerId}?pub={publisherId}
 ```
 
 **4. Khi có conversion:**
