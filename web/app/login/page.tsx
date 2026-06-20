@@ -53,8 +53,8 @@ export default function LoginPage() {
       <div className="relative w-full max-w-md px-4">
         {/* Logo above card — on dark background so PNG blends naturally */}
         <div className="flex flex-col items-center mb-6">
-          <LogoMark size={120} />
-          <p className="text-slate-400 text-sm mt-1 tracking-wide">Performance Marketing Network</p>
+          <LogoMark size={280} />
+          <p className="text-slate-400 text-sm mt-2 tracking-wide">Performance Marketing Network</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
