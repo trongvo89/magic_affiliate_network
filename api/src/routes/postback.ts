@@ -96,10 +96,10 @@ export default async function postbackRoutes(server: FastifyInstance) {
       })
       await logPostback({ source: 'appsflyer', rawQuery: rawPayload, result: 'ok', conversionId: conversion.id, offerId: offer.id, publisherId: publisher?.id, xid: sourceRefId, status })
 
-      if (status === 'APPROVED' && publisher?.postbackUrl) {
+      if (publisher?.postbackUrl) {
         setImmediate(() => sendOutboundPostback(prisma, conversion.id, publisher.postbackUrl!, {
           click_id: publisher.id, payout: String(commissionAmount), event: eventType,
-          order_id: sourceRefId, status: 'approved', offer_id: offer.id, offer_name: offer.name,
+          order_id: sourceRefId, status: status.toLowerCase(), offer_id: offer.id, offer_name: offer.name,
         }))
       }
     } catch (err: any) {
@@ -148,10 +148,10 @@ export default async function postbackRoutes(server: FastifyInstance) {
       })
       await logPostback({ source: 'adjust', rawQuery: rawPayload, result: 'ok', conversionId: conversion.id, offerId: offer.id, publisherId: publisher?.id, xid: sourceRefId, status })
 
-      if (status === 'APPROVED' && publisher?.postbackUrl) {
+      if (publisher?.postbackUrl) {
         setImmediate(() => sendOutboundPostback(prisma, conversion.id, publisher.postbackUrl!, {
           click_id: publisher.id, payout: String(commissionAmount), event: eventType,
-          order_id: sourceRefId, status: 'approved', offer_id: offer.id, offer_name: offer.name,
+          order_id: sourceRefId, status: status.toLowerCase(), offer_id: offer.id, offer_name: offer.name,
         }))
       }
     } catch (err: any) {
@@ -211,10 +211,10 @@ export default async function postbackRoutes(server: FastifyInstance) {
       })
       await logPostback({ source: 'cityads', rawQuery: rawPayload, result: 'ok', conversionId: conversion.id, offerId: offer.id, publisherId: publisher?.id, xid: sourceRefId, status })
 
-      if (status === 'APPROVED' && publisher?.postbackUrl) {
+      if (publisher?.postbackUrl) {
         setImmediate(() => sendOutboundPostback(prisma, conversion.id, publisher.postbackUrl!, {
           click_id: publisher.id, payout: String(commissionAmount), event: eventType,
-          order_id: sourceRefId, status: 'approved', offer_id: offer.id, offer_name: offer.name,
+          order_id: sourceRefId, status: status.toLowerCase(), offer_id: offer.id, offer_name: offer.name,
         }))
       }
     } catch (err: any) {
