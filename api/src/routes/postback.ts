@@ -28,11 +28,14 @@ interface AdjustQuery {
 
 interface CityAdsQuery {
   xid?: string
+  click_id?: string
   offer_id?: string
   action_type?: string
-  payout?: string           // commission CityAds pays Magic — use this for revenue
+  payout?: string
   payout_currency?: string
-  order_total?: string      // GMV/sale amount — stored in rawPayload only
+  open_commission?: string
+  order_amount?: string
+  order_total?: string
   order_total_currency?: string
   sa?: string
   status?: string
@@ -169,11 +172,11 @@ export default async function postbackRoutes(server: FastifyInstance) {
   }
 
   async function handleCityAds(query: CityAdsQuery, rawPayload: Record<string, unknown>) {
-    const rawXid = query.xid
+    const rawXid = query.xid || query.click_id
     const appId = query.offer_id
     const publisherId = query.sa
     const eventType = query.action_type || 'conversion'
-    const revenue = parseFloat(query.payout || '0') || 0
+    const revenue = parseFloat(query.payout || query.open_commission || query.order_amount || '0') || 0
     const rawCurrency = query.payout_currency || query.order_total_currency || null
     const conversionTime = query.conversion_time || ''
     const eventAt = conversionTime
