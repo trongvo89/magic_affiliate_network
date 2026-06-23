@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { getUser, logout } from '@/lib/api'
+import { fetchUser, logout } from '@/lib/api'
 import { LogoMark } from '@/components/LogoMark'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -11,9 +11,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
-    const u = getUser()
-    if (!u || u.role !== 'PUBLISHER') { router.push('/login'); return }
-    setUser(u)
+    fetchUser().then(u => {
+      if (!u || u.role !== 'PUBLISHER') { router.push('/login'); return }
+      setUser(u)
+    })
   }, [router])
 
   if (!user) return null

@@ -19,8 +19,6 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const { data } = await api.post('/auth/login', { email: form.email, password: form.password })
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('user', JSON.stringify(data.user))
       router.push(data.user.role === 'ADMIN' ? '/admin' : '/dashboard')
     } catch (err: any) {
       setError(err.response?.data?.error || 'Login failed')

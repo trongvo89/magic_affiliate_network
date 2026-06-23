@@ -44,7 +44,15 @@ export default async function authRoutes(server: FastifyInstance) {
     if (user.status === 'PENDING') return reply.code(403).send({ error: 'Account pending approval' })
 
     const token = server.jwt.sign({ id: user.id, email: user.email, role: user.role })
-    return { token, user: { id: user.id, email: user.email, name: user.name, role: user.role, status: user.status } }
+    const isProduction = process.env.NODE_ENV === 'production'
+    reply.setCookie('token', token, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 2 * 60 * 60,
+    })
+    return { user: { id: user.id, email: user.email, name: user.name, role: user.role, status: user.status } }
   })
 
   server.post<{ Body: { email: string; password: string; name: string } }>('/register', async (request, reply) => {
@@ -109,6 +117,26 @@ export default async function authRoutes(server: FastifyInstance) {
       data: { password: await bcrypt.hash(password, 12), resetToken: null, resetTokenAt: null },
     })
 
+    return { ok: true }
+  })
+
+  server.get('/me', async (request, reply) => {
+    try {
+      await request.jwtVerify()
+      const payload = request.user as { id: string; email: string; role: string }
+      const user = await prisma.user.findUnique({
+        where: { id: payload.id },
+        select: { id: true, email: true, name: true, role: true, status: true },
+      })
+      if (!user) return reply.code(401).send({ error: 'User not found' })
+      return { user }
+    } catch {
+      return reply.code(401).send({ error: 'Not authenticated' })
+    }
+  })
+
+  server.post('/logout', async (_request, reply) => {
+    reply.clearCookie('token', { path: '/' })
     return { ok: true }
   })
 }

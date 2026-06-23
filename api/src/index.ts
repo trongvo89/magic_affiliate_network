@@ -1,6 +1,8 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
+import cookie from '@fastify/cookie'
+import helmet from '@fastify/helmet'
 import multipart from '@fastify/multipart'
 import { PrismaClient } from '@prisma/client'
 import dotenv from 'dotenv'
@@ -44,6 +46,14 @@ async function start() {
 
   await server.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } })
 
+  await server.register(cookie, {
+    secret: process.env.COOKIE_SECRET || process.env.JWT_SECRET,
+  })
+
+  await server.register(helmet, {
+    contentSecurityPolicy: false,
+  })
+
   await server.register(cors, {
     origin: corsOrigin || (process.env.NODE_ENV !== 'production' ? true : false),
     credentials: true,
@@ -51,7 +61,8 @@ async function start() {
 
   await server.register(jwt, {
     secret: process.env.JWT_SECRET,
-    sign: { expiresIn: '7d' },
+    sign: { expiresIn: '2h' },
+    cookie: { cookieName: 'token', signed: false },
   })
 
   server.decorate('prisma', prisma)
