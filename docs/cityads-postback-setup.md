@@ -10,24 +10,32 @@
 Dán URL sau vào cấu hình postback của offer trên CityAds:
 
 ```
-https://www.magicmedia.asia/postback/cityads?offer_id={offer_id}&sa={sa}&open_commission={open_commission}&order_amount={order_amount}&order_total_currency={order_total_currency}&status={status}&action_type={action_type}&xid={click_id}&conversion_time={conversion_time}
+https://www.magicmedia.asia/postback/cityads?offer_id={offer_id}&sa={sa}&open_commission={open_commission}&order_amount={order_amount}&order_total={order_total}&order_total_currency={order_total_currency}&status={status}&action_type={action_type}&xid={xid}&conversion_time={conversion_time}&payout={payout}&payout_currency={payout_currency}&order_id={order_id}
 ```
 
 ---
 
-## 2. Bảng mapping tham số
+## 2. Macro cần bật trong CityAds
 
-| Tham số (Magic) | Macro CityAds | Bắt buộc | Mô tả |
-|-----------------|---------------|----------|-------|
-| `offer_id` | `{offer_id}` | **Có** | ID offer trên CityAds |
-| `sa` | `{sa}` | **Có** | Sub-affiliate / publisher ID |
-| `open_commission` | `{open_commission}` | **Có** | Hoa hồng (commission). **Phải > 0 cho CPS** |
-| `order_amount` | `{order_amount}` | Khuyến khích | Giá trị đơn hàng |
-| `order_total_currency` | `{order_total_currency}` | Có | Đơn vị tiền tệ |
-| `status` | `{status}` | **Có** | Trạng thái đơn hàng (xem bảng bên dưới) |
-| `action_type` | `{action_type}` | Có | Loại hành động: `sale`, `lead`, `install`... |
-| `xid` | `{click_id}` | **Có** | Click/transaction ID duy nhất, dùng để chống trùng |
-| `conversion_time` | `{conversion_time}` | Có | Thời gian xảy ra conversion |
+Vào cấu hình postback trên CityAds và **tick chọn** các macro sau:
+
+| Macro | Mô tả | Bắt buộc |
+|-------|--------|----------|
+| `offer_id` | Offer ID | **Có** |
+| `sa` | Subaccount 1 (publisher ID) | **Có** |
+| `xid` | Click ID — dùng chống trùng | **Có** |
+| `open_commission` | Hoa hồng (RUR) | **Có** |
+| `order_amount` | Giá trị đơn hàng | Khuyến khích |
+| `order_total` | Order Total | Khuyến khích |
+| `order_total_currency` | Đơn vị tiền tệ đơn hàng | Có |
+| `status` | Trạng thái đơn hàng | **Có** |
+| `action_type` | Loại hành động (sale/lead/CPL) | Có |
+| `conversion_time` | Thời gian conversion | Có |
+| `payout` | Hoa hồng đã duyệt | Khuyến khích |
+| `payout_currency` | Currency của payout | Khuyến khích |
+| `order_id` | Mã đơn hàng (đối soát) | Khuyến khích |
+
+**Lưu ý:** `payout` chỉ có giá trị khi đơn được duyệt. Với đơn pending, hệ thống dùng `open_commission` × tỷ giá để tính.
 
 ---
 
@@ -37,47 +45,53 @@ https://www.magicmedia.asia/postback/cityads?offer_id={offer_id}&sa={sa}&open_co
 |--------------------|----------------|-------|
 | `1` hoặc `approved` | **APPROVED** | Đơn hàng được duyệt |
 | `3` hoặc `rejected` hoặc `declined` | **REJECTED** | Đơn hàng bị từ chối |
-| Giá trị khác hoặc trống | **PENDING** | Đang chờ xử lý |
+| Giá trị khác (`open`, trống...) | **PENDING** | Đang chờ xử lý |
 
 ---
 
-## 4. Yêu cầu quan trọng
+## 4. Cách hệ thống tính commission
+
+1. CityAds gửi `open_commission` (bằng RUR)
+2. Hệ thống quy đổi: `open_commission × tỷ giá` → VND (revenue)
+3. Commission publisher = tính theo cấu hình offer (% hoặc cố định)
+4. Nếu `payout > 0` (đơn đã duyệt): dùng `payout` thay vì quy đổi
+
+---
+
+## 5. Yêu cầu quan trọng
 
 ### Gửi đầy đủ trạng thái
 Hệ thống cần nhận **tất cả trạng thái** conversion:
 - **approved** — đơn được duyệt
-- **pending** — đơn đang chờ
+- **pending/open** — đơn đang chờ
 - **rejected** — đơn bị huỷ/trả hàng
 
-### Commission phải có giá trị
-- Với offer **CPS**: `open_commission` phải > 0
-- Nếu = 0, hệ thống ghi nhận nhưng đánh **PENDING**
-
 ### Chống trùng
-- Hệ thống chống trùng theo `xid` (click_id)
+- Hệ thống chống trùng theo `xid`
+- **Phải bật macro `xid`** trong CityAds
 - Gửi trùng `xid` → lần 2 bị bỏ qua
 
 ---
 
-## 5. Ví dụ
+## 6. Ví dụ
 
-### Đơn được duyệt (CPS Shopee):
+### Đơn pending (CPL):
 ```
-GET https://www.magicmedia.asia/postback/cityads?offer_id=38407&sa=cmq0zoz6w0001134qbpj6a5ga&open_commission=50000&order_amount=625000&order_total_currency=VND&status=approved&action_type=sale&xid=38407-1-1782011539-5510950&conversion_time=2026-06-20T10:30:00
+GET https://www.magicmedia.asia/postback/cityads?offer_id=38407&sa=cmq0zoz6w0001134qbpj6a5ga&open_commission=49.8751&order_amount=0&order_total=0&order_total_currency=VND&status=open&action_type=CPL&xid=12345678&conversion_time=2026-06-23T10:30:00&payout=0&payout_currency=VND&order_id=ORD001
 ```
 
-### Đơn bị từ chối:
+### Đơn được duyệt (CPS):
 ```
-GET https://www.magicmedia.asia/postback/cityads?offer_id=38407&sa=cmq0zoz6w0001134qbpj6a5ga&open_commission=0&order_amount=0&order_total_currency=VND&status=rejected&action_type=sale&xid=38407-1-1782011539-5510950
+GET https://www.magicmedia.asia/postback/cityads?offer_id=38407&sa=cmq0zoz6w0001134qbpj6a5ga&open_commission=49.8751&order_amount=640223&order_total=640223&order_total_currency=VND&status=approved&action_type=sale&xid=12345679&conversion_time=2026-06-23T11:00:00&payout=17926&payout_currency=VND&order_id=ORD002
 ```
 
 ---
 
-## 6. Kiểm tra
+## 7. Kiểm tra
 
 Test bằng curl:
 ```
-curl "https://www.magicmedia.asia/postback/cityads?offer_id=38407&sa=test&open_commission=1.00&order_total_currency=VND&status=approved&action_type=sale&xid=test_$(date +%s)"
+curl "https://www.magicmedia.asia/postback/cityads?offer_id=38407&sa=test&open_commission=49.87&order_total_currency=VND&status=open&action_type=CPL&xid=test_$(date +%s)"
 ```
 
 Response thành công: `{"ok": true}`
