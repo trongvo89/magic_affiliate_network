@@ -181,7 +181,9 @@ export default async function postbackRoutes(server: FastifyInstance) {
     const openCommission = parseFloat(query.open_commission || '0') || 0
     const payout = parseFloat(query.payout || '0') || 0
     const exchangeRate = parseFloat(process.env.CITYADS_EXCHANGE_RATE || '1')
-    const revenue = payout > 0 ? payout : (openCommission * exchangeRate)
+    const orderTotal = parseFloat(query.order_total || query.order_amount || '0') || 0
+    const revenue = orderTotal
+    const networkCommission = payout > 0 ? payout : (openCommission * exchangeRate)
     const rawCurrency = query.payout_currency || query.order_total_currency || null
     const conversionTime = query.conversion_time || ''
     const eventAt = conversionTime
@@ -202,10 +204,12 @@ export default async function postbackRoutes(server: FastifyInstance) {
     const currency = offer.currency || rawCurrency || 'USD'
     const publisher = publisherId ? await prisma.user.findUnique({ where: { id: publisherId } }) : null
 
-    const commissionAmount = calculateCommission(offer.commissionType as CommType, offer.commissionValue, revenue)
+    const commissionAmount = networkCommission > 0
+      ? calculateCommission(offer.commissionType as CommType, offer.commissionValue, networkCommission)
+      : 0
     const status = determineCityAdsStatus({
       publisherId, publisher, cityAdsStatus: query.status,
-      commissionType: offer.commissionType as CommType, revenue,
+      commissionType: offer.commissionType as CommType, revenue: networkCommission,
     })
 
     if (publisherId && !publisher) {
