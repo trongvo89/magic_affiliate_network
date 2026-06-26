@@ -444,20 +444,59 @@ export default async function adminRoutes(server: FastifyInstance) {
     }
   )
 
-  // Update single conversion status
-  server.put<{ Params: { id: string }; Body: { status: string } }>(
+  // Update single conversion
+  server.put<{ Params: { id: string }; Body: { status?: string; revenue?: number; commissionAmount?: number; currency?: string } }>(
     '/conversions/:id',
     async (request, reply) => {
       const { id } = request.params
-      const { status } = request.body
-      if (!['PENDING', 'APPROVED', 'REJECTED'].includes(status)) {
-        return reply.code(400).send({ error: 'Invalid status' })
+      const { status, revenue, commissionAmount, currency } = request.body
+      const updateData: Record<string, any> = {}
+
+      if (status) {
+        if (!['PENDING', 'APPROVED', 'REJECTED'].includes(status)) {
+          return reply.code(400).send({ error: 'Invalid status' })
+        }
+        updateData.status = status
       }
+      if (revenue !== undefined) {
+        const val = parseFloat(String(revenue))
+        if (isNaN(val) || val < 0) return reply.code(400).send({ error: 'Invalid revenue' })
+        updateData.revenue = val
+      }
+      if (commissionAmount !== undefined) {
+        const val = parseFloat(String(commissionAmount))
+        if (isNaN(val) || val < 0) return reply.code(400).send({ error: 'Invalid commissionAmount' })
+        updateData.commissionAmount = val
+      }
+      if (currency) {
+        updateData.currency = currency
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return reply.code(400).send({ error: 'No fields to update' })
+      }
+
+      const before = await prisma.conversion.findUnique({ where: { id } })
+      if (!before) return reply.code(404).send({ error: 'Conversion not found' })
+
       const conversion = await prisma.conversion.update({
         where: { id },
-        data: { status: status as any },
+        data: updateData,
         include: { offer: { select: { name: true, mmpSource: true } }, publisher: { select: { name: true, email: true } } },
       })
+
+      const changes = diffChanges(before, conversion)
+      if (changes) {
+        await auditLog(prisma, {
+          userId: (request.user as any).id,
+          userName: (request.user as any).email,
+          action: 'UPDATE',
+          entity: 'Conversion',
+          entityId: id,
+          changes,
+        })
+      }
+
       return conversion
     }
   )

@@ -35,6 +35,11 @@ export default function ConversionsPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
 
+  // Edit conversion modal
+  const [editing, setEditing] = useState<Conversion | null>(null)
+  const [editForm, setEditForm] = useState({ revenue: '', commissionAmount: '', currency: '' })
+  const [editSaving, setEditSaving] = useState(false)
+
   // Single manual form
   const [showManual, setShowManual] = useState(false)
   const [manualForm, setManualForm] = useState(BLANK_FORM)
@@ -82,6 +87,30 @@ export default function ConversionsPage() {
       setConversions(prev => prev.map(c => c.id === id ? { ...c, status } : c))
     } finally {
       setUpdatingId(null)
+    }
+  }
+
+  function openEdit(c: Conversion) {
+    setEditing(c)
+    setEditForm({ revenue: String(c.revenue), commissionAmount: String(c.commissionAmount), currency: c.currency })
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editing) return
+    setEditSaving(true)
+    try {
+      const { data } = await api.put(`/admin/conversions/${editing.id}`, {
+        revenue: parseFloat(editForm.revenue),
+        commissionAmount: parseFloat(editForm.commissionAmount),
+        currency: editForm.currency,
+      })
+      setConversions(prev => prev.map(c => c.id === editing.id ? { ...c, revenue: data.revenue, commissionAmount: data.commissionAmount, currency: data.currency } : c))
+      setEditing(null)
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Update failed')
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -377,6 +406,8 @@ export default function ConversionsPage() {
                         <button onClick={() => updateStatus(c.id, 'REJECTED')} disabled={updatingId === c.id}
                           className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded font-medium">✕</button>
                       )}
+                      <button onClick={() => openEdit(c)} title="Edit values"
+                        className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-600 px-2 py-1 rounded font-medium">✎</button>
                     </div>
                   </td>
                   <td className="px-4 py-2.5">
@@ -421,6 +452,48 @@ export default function ConversionsPage() {
             <pre className="bg-gray-50 rounded-lg p-4 text-xs font-mono overflow-auto max-h-64 text-gray-700">
               {JSON.stringify(selected.rawPayload, null, 2)}
             </pre>
+          </div>
+        </div>
+      )}
+
+      {/* Edit conversion modal */}
+      {editing && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEditing(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-gray-900">Edit Conversion</h2>
+              <button onClick={() => setEditing(null)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+            </div>
+            <div className="text-xs text-gray-500 mb-4">
+              <span className="font-medium">{editing.offer?.name}</span> &middot; {editing.sourceRefId?.slice(0, 20)}...
+            </div>
+            <form onSubmit={saveEdit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Order Value (Revenue)</label>
+                <input type="number" step="any" min="0" required value={editForm.revenue}
+                  onChange={e => setEditForm(f => ({ ...f, revenue: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Commission (Publisher)</label>
+                <input type="number" step="any" min="0" required value={editForm.commissionAmount}
+                  onChange={e => setEditForm(f => ({ ...f, commissionAmount: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                <select value={editForm.currency} onChange={e => setEditForm(f => ({ ...f, currency: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                  <option value="VND">VND</option>
+                  <option value="USD">USD</option>
+                  <option value="RUB">RUB</option>
+                </select>
+              </div>
+              <button type="submit" disabled={editSaving}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2 rounded-lg text-sm">
+                {editSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </form>
           </div>
         </div>
       )}
