@@ -23,21 +23,29 @@ api.interceptors.response.use(
 )
 
 let cachedUser: any = null
+let cachedImpersonating = false
 
 export async function fetchUser() {
   if (cachedUser) return cachedUser
   try {
     const { data } = await api.get('/auth/me')
     cachedUser = data.user
+    cachedImpersonating = !!data.impersonating
     return cachedUser
   } catch {
     cachedUser = null
+    cachedImpersonating = false
     return null
   }
 }
 
+export function isImpersonating() {
+  return cachedImpersonating
+}
+
 export function clearUserCache() {
   cachedUser = null
+  cachedImpersonating = false
 }
 
 export async function logout() {

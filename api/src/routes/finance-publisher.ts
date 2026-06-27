@@ -18,6 +18,10 @@ export default async function financePublisherRoutes(server: FastifyInstance) {
   server.addHook('preHandler', async (request, reply) => {
     if (request.routerPath?.startsWith('/publisher/finance')) {
       await requireActivePublisher(request, reply)
+      const user = request.user as any
+      if (user?.impersonatedBy && request.method !== 'GET') {
+        return reply.code(403).send({ error: 'Read-only: admin impersonation mode' })
+      }
     }
   })
 

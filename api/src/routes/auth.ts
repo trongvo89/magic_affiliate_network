@@ -123,13 +123,13 @@ export default async function authRoutes(server: FastifyInstance) {
   server.get('/me', async (request, reply) => {
     try {
       await request.jwtVerify()
-      const payload = request.user as { id: string; email: string; role: string }
+      const payload = request.user as { id: string; email: string; role: string; impersonatedBy?: string }
       const user = await prisma.user.findUnique({
         where: { id: payload.id },
         select: { id: true, email: true, name: true, role: true, status: true },
       })
       if (!user) return reply.code(401).send({ error: 'User not found' })
-      return { user }
+      return { user, impersonating: !!payload.impersonatedBy }
     } catch {
       return reply.code(401).send({ error: 'Not authenticated' })
     }

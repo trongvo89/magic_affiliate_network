@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { api, fmtDate, fetchUser } from '@/lib/api'
+import { useRouter } from 'next/navigation'
+import { api, fmtDate, fetchUser, clearUserCache } from '@/lib/api'
 
 interface TeamMember {
   id: string
@@ -12,6 +13,7 @@ interface TeamMember {
 }
 
 export default function TeamPage() {
+  const router = useRouter()
   const [members, setMembers] = useState<TeamMember[]>([])
   const [actionId, setActionId] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -35,6 +37,16 @@ export default function TeamPage() {
       setError(err.response?.data?.error || 'Action failed')
     } finally {
       setActionId(null)
+    }
+  }
+
+  async function impersonate(id: string) {
+    try {
+      await api.post(`/admin/impersonate/${id}`)
+      clearUserCache()
+      router.push('/dashboard')
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Impersonation failed')
     }
   }
 
@@ -116,6 +128,14 @@ export default function TeamPage() {
                 className="text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-2.5 py-1 rounded-md font-medium transition-colors"
               >
                 Reinstate
+              </button>
+            )}
+            {m.role === 'PUBLISHER' && m.status === 'ACTIVE' && (
+              <button
+                onClick={() => impersonate(m.id)}
+                className="text-xs bg-indigo-500 hover:bg-indigo-600 text-white px-2.5 py-1 rounded-md font-medium transition-colors"
+              >
+                Login As
               </button>
             )}
           </div>

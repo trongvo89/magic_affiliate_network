@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { api } from '@/lib/api'
+import { api, isImpersonating } from '@/lib/api'
 
 interface Profile {
   id: string
@@ -11,6 +11,7 @@ interface Profile {
 }
 
 export default function SettingsPage() {
+  const readOnly = isImpersonating()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [form, setForm] = useState({ name: '', postbackUrl: '', password: '', currentPassword: '' })
   const [saving, setSaving] = useState(false)
@@ -79,7 +80,14 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {readOnly && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-lg px-4 py-3 mb-4">
+          Read-only mode — you are viewing as this publisher.
+        </div>
+      )}
+
       <form onSubmit={handleSave} className="space-y-6">
+      <fieldset disabled={readOnly} className="space-y-6 disabled:opacity-60">
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <h2 className="font-semibold text-gray-900 mb-4">Profile</h2>
           <div className="space-y-4">
@@ -193,6 +201,7 @@ export default function SettingsPage() {
         >
           {saving ? 'Saving...' : 'Save Changes'}
         </button>
+      </fieldset>
       </form>
     </div>
   )

@@ -29,8 +29,8 @@ const server = Fastify({
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
-    payload: { id: string; email: string; role: string }
-    user: { id: string; email: string; role: string }
+    payload: { id: string; email: string; role: string; impersonatedBy?: string }
+    user: { id: string; email: string; role: string; impersonatedBy?: string }
   }
 }
 

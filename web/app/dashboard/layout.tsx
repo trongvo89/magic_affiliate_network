@@ -2,20 +2,28 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { fetchUser, logout } from '@/lib/api'
+import { api, fetchUser, logout, clearUserCache, isImpersonating } from '@/lib/api'
 import { LogoMark } from '@/components/LogoMark'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const [user, setUser] = useState<any>(null)
+  const [impersonating, setImpersonating] = useState(false)
 
   useEffect(() => {
     fetchUser().then(u => {
       if (!u || u.role !== 'PUBLISHER') { router.push('/login'); return }
       setUser(u)
+      setImpersonating(isImpersonating())
     })
   }, [router])
+
+  async function exitImpersonation() {
+    await api.post('/admin/exit-impersonate')
+    clearUserCache()
+    window.location.href = '/admin'
+  }
 
   if (!user) return null
 
@@ -112,7 +120,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
         </div>
       </aside>
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="flex-1 overflow-auto">
+        {impersonating && (
+          <div className="bg-amber-500 text-white px-4 py-2.5 flex items-center justify-between text-sm font-medium">
+            <span>Viewing as {user.email} (read-only)</span>
+            <button onClick={exitImpersonation} className="bg-white text-amber-700 px-3 py-1 rounded-md text-xs font-bold hover:bg-amber-50 transition-colors">
+              Exit
+            </button>
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   )
 }

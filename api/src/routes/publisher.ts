@@ -24,6 +24,13 @@ export default async function publisherRoutes(server: FastifyInstance) {
 
   server.addHook('preHandler', requireActivePublisher)
 
+  server.addHook('preHandler', async (request: FastifyRequest, reply) => {
+    const user = request.user as any
+    if (user?.impersonatedBy && request.method !== 'GET') {
+      return reply.code(403).send({ error: 'Read-only: admin impersonation mode' })
+    }
+  })
+
   server.get<{ Querystring: { from?: string; to?: string } }>('/stats', async (request) => {
     const { id } = request.user as any
     const { from, to } = request.query

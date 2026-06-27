@@ -150,6 +150,49 @@ export default async function adminRoutes(server: FastifyInstance) {
     return { updated: results.length, total: conversions.length, exchangeRate, details: results }
   })
 
+  // Impersonate publisher (read-only)
+  server.post<{ Params: { id: string } }>('/impersonate/:id', async (request, reply) => {
+    const adminUser = request.user as any
+    const publisher = await prisma.user.findUnique({ where: { id: request.params.id } })
+    if (!publisher || publisher.role !== 'PUBLISHER') {
+      return reply.code(404).send({ error: 'Publisher not found' })
+    }
+
+    const token = server.jwt.sign({
+      id: publisher.id, email: publisher.email, role: publisher.role,
+      impersonatedBy: adminUser.id,
+    })
+    const isProduction = process.env.NODE_ENV === 'production'
+    reply.setCookie('token', token, {
+      httpOnly: true, secure: isProduction, sameSite: 'lax', path: '/', maxAge: 2 * 60 * 60,
+    })
+    return { user: { id: publisher.id, email: publisher.email, name: publisher.name, role: publisher.role } }
+  })
+
+  // Exit impersonation — restore admin session
+  server.post('/exit-impersonate', async (request, reply) => {
+    try {
+      await request.jwtVerify()
+    } catch {
+      return reply.code(401).send({ error: 'Unauthorized' })
+    }
+    const payload = request.user as any
+    if (!payload.impersonatedBy) {
+      return reply.code(400).send({ error: 'Not impersonating' })
+    }
+    const admin = await prisma.user.findUnique({ where: { id: payload.impersonatedBy } })
+    if (!admin || admin.role !== 'ADMIN') {
+      return reply.code(403).send({ error: 'Original admin not found' })
+    }
+
+    const token = server.jwt.sign({ id: admin.id, email: admin.email, role: admin.role })
+    const isProduction = process.env.NODE_ENV === 'production'
+    reply.setCookie('token', token, {
+      httpOnly: true, secure: isProduction, sameSite: 'lax', path: '/', maxAge: 2 * 60 * 60,
+    })
+    return { user: { id: admin.id, email: admin.email, name: admin.name, role: admin.role } }
+  })
+
   // Conversions list (paginated + filterable)
   server.get<{ Querystring: { page?: string; limit?: string; offerId?: string; publisherId?: string; status?: string; from?: string; to?: string } }>(
     '/conversions',

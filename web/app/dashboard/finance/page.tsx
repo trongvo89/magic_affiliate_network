@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { api, fmtMoney } from '@/lib/api'
+import { api, fmtMoney, isImpersonating } from '@/lib/api'
 
 interface Balance {
   pendingAmount: number
@@ -117,18 +117,18 @@ export default function FinanceOverviewPage() {
               View my orders
             </Link>
 
-            {balance.availableAmount > 0 ? (
+            {!isImpersonating() && balance.availableAmount > 0 ? (
               <Link
                 href="/dashboard/finance/payments/new"
                 className="px-4 py-2 text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors"
               >
                 Request payment
               </Link>
-            ) : (
+            ) : !isImpersonating() ? (
               <span className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed">
                 Request payment
               </span>
-            )}
+            ) : null}
           </div>
         </>
       )}
