@@ -11,7 +11,11 @@ function parseDate(s: string | undefined): Date | null {
 async function requireAdmin(request: FastifyRequest, reply: any) {
   try {
     await request.jwtVerify()
-    if ((request.user as any).role !== 'ADMIN') return reply.code(403).send({ error: 'Forbidden' })
+    const user = request.user as any
+    const url = request.url.split('?')[0]
+    if (user.role !== 'ADMIN' && !(user.impersonatedBy && url.endsWith('/exit-impersonate'))) {
+      return reply.code(403).send({ error: 'Forbidden' })
+    }
   } catch {
     return reply.code(401).send({ error: 'Unauthorized' })
   }
