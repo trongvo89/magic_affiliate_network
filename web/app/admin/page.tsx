@@ -92,9 +92,9 @@ export default function AdminDashboard() {
   const todayAgg = useMemo(() => stats ? aggregatePeriod(stats.today, displayCurrency, rates) : null, [stats, displayCurrency, rates])
   const openCommission = useMemo(() => stats ? convertByCurrency(stats.openCommissionByCurrency, displayCurrency, rates) : 0, [stats, displayCurrency, rates])
 
-  const convertedDaily = useMemo(() => daily.map(d => ({
-    ...d,
-    commission: convertByCurrency(d.commissionByCurrency || {}, displayCurrency, rates),
+  const convertedDaily = useMemo(() => daily.map(({ commissionByCurrency, ...rest }) => ({
+    ...rest,
+    commission: convertByCurrency(commissionByCurrency || {}, displayCurrency, rates),
   })), [daily, displayCurrency, rates])
 
   const totalClicks = daily.reduce((s, d) => s + d.clicks, 0)

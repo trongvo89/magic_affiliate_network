@@ -91,9 +91,9 @@ export default function DashboardPage() {
     stats ? convertByCurrency(stats.totalApprovedByCurrency, displayCurrency, rates) : 0,
     [stats, displayCurrency, rates])
 
-  const convertedDaily = useMemo(() => daily.map(d => ({
-    ...d,
-    commission: convertByCurrency(d.commissionByCurrency || {}, displayCurrency, rates),
+  const convertedDaily = useMemo(() => daily.map(({ commissionByCurrency, ...rest }) => ({
+    ...rest,
+    commission: convertByCurrency(commissionByCurrency || {}, displayCurrency, rates),
   })), [daily, displayCurrency, rates])
 
   return (
