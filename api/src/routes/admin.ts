@@ -563,6 +563,33 @@ export default async function adminRoutes(server: FastifyInstance) {
     }
   )
 
+  // Upload offer logo
+  server.post<{ Params: { id: string } }>(
+    '/offers/:id/logo',
+    async (request, reply) => {
+      const { id } = request.params
+      const offer = await prisma.offer.findUnique({ where: { id } })
+      if (!offer) return reply.code(404).send({ error: 'Offer not found' })
+
+      const file = await request.file()
+      if (!file) return reply.code(400).send({ error: 'No file uploaded' })
+
+      const allowedTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
+      if (!allowedTypes.includes(file.mimetype)) {
+        return reply.code(400).send({ error: 'Only PNG, JPEG, WebP, SVG allowed' })
+      }
+
+      const chunks: Buffer[] = []
+      for await (const chunk of file.file) chunks.push(chunk)
+      const buffer = Buffer.concat(chunks)
+      if (buffer.length > 2 * 1024 * 1024) return reply.code(400).send({ error: 'File too large (max 2MB)' })
+
+      const base64 = `data:${file.mimetype};base64,${buffer.toString('base64')}`
+      await prisma.offer.update({ where: { id }, data: { logoUrl: base64 } })
+      return { logoUrl: base64 }
+    }
+  )
+
   // Manual conversion create (single)
   server.post<{ Body: { publisherId: string; offerId: string; eventType: string; revenue?: number; eventAt: string; sourceRefId?: string; status?: string } }>(
     '/conversions',

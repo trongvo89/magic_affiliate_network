@@ -17,6 +17,7 @@ interface Offer {
   currency: string
   status: string
   destinationUrl: string | null
+  logoUrl: string | null
   _count: { conversions: number }
 }
 
@@ -76,6 +77,23 @@ export default function OffersPage() {
   const [expandedOfferId, setExpandedOfferId] = useState<string | null>(null)
   const [breakdown, setBreakdown] = useState<Record<string, PubBreakdown[]>>({})
   const [loadingBreakdown, setLoadingBreakdown] = useState<string | null>(null)
+  const [uploadingLogo, setUploadingLogo] = useState<string | null>(null)
+
+  async function handleLogoUpload(offerId: string, file: File) {
+    setUploadingLogo(offerId)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      await api.post(`/admin/offers/${offerId}/logo`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      await loadOffers()
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Upload failed')
+    } finally {
+      setUploadingLogo(null)
+    }
+  }
 
   async function loadOffers() {
     const { data } = await api.get('/admin/offers')
@@ -258,7 +276,22 @@ export default function OffersPage() {
                       </button>
                     </div>
                   </td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{o.name}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <label className="w-9 h-9 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden cursor-pointer hover:border-orange-300 transition-colors relative">
+                        {uploadingLogo === o.id ? (
+                          <svg className="w-4 h-4 text-gray-400 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                        ) : o.logoUrl ? (
+                          <img src={o.logoUrl} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <svg className="w-4 h-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        )}
+                        <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(o.id, f); e.target.value = '' }} />
+                      </label>
+                      <span className="font-medium text-gray-900">{o.name}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-gray-600">
                     <div>{o.appName}</div>
                     <div className="text-xs text-gray-400 font-mono">{o.appId}</div>

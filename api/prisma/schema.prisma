@@ -61,6 +61,7 @@ model Offer {
   currency             String      @default("USD")
   status               OfferStatus @default(ACTIVE)
   destinationUrl       String?
+  logoUrl              String?
   pubCommissionDisplay String?
   advertiserId         String?
   advertiser           Advertiser? @relation(fields: [advertiserId], references: [id])
