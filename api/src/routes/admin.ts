@@ -6,8 +6,8 @@ const offerSelect = {
   id: true, name: true, appId: true, appName: true,
   mmpSource: true, status: true, currency: true,
   commissionType: true, commissionValue: true,
-  pubCommissionDisplay: true, destinationUrl: true,
-  createdAt: true, updatedAt: true,
+  pubCommissionDisplay: true,
+  createdAt: true,
 } as const
 
 function parseDate(s: string | undefined): Date | null {
