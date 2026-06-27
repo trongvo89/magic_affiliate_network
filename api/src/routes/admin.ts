@@ -2,6 +2,14 @@ import { FastifyInstance, FastifyRequest } from 'fastify'
 import { PrismaClient } from '@prisma/client'
 import { auditLog, diffChanges } from '../lib/audit'
 
+const offerSelect = {
+  id: true, name: true, appId: true, appName: true,
+  mmpSource: true, status: true, currency: true,
+  commissionType: true, commissionValue: true,
+  pubCommissionDisplay: true, destinationUrl: true,
+  createdAt: true, updatedAt: true,
+} as const
+
 function parseDate(s: string | undefined): Date | null {
   if (!s) return null
   const d = new Date(s)
@@ -297,7 +305,7 @@ export default async function adminRoutes(server: FastifyInstance) {
   server.get('/offers', async () => {
     const offers = await prisma.offer.findMany({
       orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { conversions: true } } },
+      select: { ...offerSelect, _count: { select: { conversions: true } } },
     })
     return offers
   })
@@ -504,6 +512,7 @@ export default async function adminRoutes(server: FastifyInstance) {
       try {
         const offer = await prisma.offer.create({
           data: { name, appName, appId, mmpSource: mmpSource as any, commissionType: commissionType as any, commissionValue, currency: currency || 'USD', destinationUrl: destinationUrl || null, pubCommissionDisplay: pubCommissionDisplay || null },
+          select: offerSelect,
         })
         const user = request.user as any
         await auditLog(prisma, { userId: user.id, userName: user.name || user.email, action: 'CREATE', entity: 'Offer', entityId: offer.id, changes: { name, appId, mmpSource, commissionType, commissionValue, currency, destinationUrl } })
@@ -534,8 +543,8 @@ export default async function adminRoutes(server: FastifyInstance) {
       if (destinationUrl !== undefined) data.destinationUrl = destinationUrl || null
       if (pubCommissionDisplay !== undefined) data.pubCommissionDisplay = pubCommissionDisplay || null
       try {
-        const before = await prisma.offer.findUnique({ where: { id } })
-        const updated = await prisma.offer.update({ where: { id }, data })
+        const before = await prisma.offer.findUnique({ where: { id }, select: offerSelect })
+        const updated = await prisma.offer.update({ where: { id }, data, select: offerSelect })
         if (before) {
           const user = request.user as any
           const changes = diffChanges(before as any, data)
@@ -568,7 +577,7 @@ export default async function adminRoutes(server: FastifyInstance) {
     '/offers/:id/logo',
     async (request, reply) => {
       const { id } = request.params
-      const offer = await prisma.offer.findUnique({ where: { id } })
+      const offer = await prisma.offer.findUnique({ where: { id }, select: { id: true } })
       if (!offer) return reply.code(404).send({ error: 'Offer not found' })
 
       const file = await request.file()
@@ -598,7 +607,7 @@ export default async function adminRoutes(server: FastifyInstance) {
       if (!publisherId || !offerId || !eventType || !eventAt) {
         return reply.code(400).send({ error: 'Missing required fields: publisherId, offerId, eventType, eventAt' })
       }
-      const offer = await prisma.offer.findUnique({ where: { id: offerId } })
+      const offer = await prisma.offer.findUnique({ where: { id: offerId }, select: { id: true, mmpSource: true, commissionType: true, commissionValue: true, currency: true } })
       if (!offer) return reply.code(404).send({ error: 'Offer not found' })
 
       const commissionAmount = offer.commissionType === 'FLAT_CPA'
@@ -743,7 +752,7 @@ export default async function adminRoutes(server: FastifyInstance) {
           if (fromDate && eventDate < fromDate) throw new Error(`event_at ${row.eventAt} is before validateFrom`)
           if (toDateBound && eventDate > toDateBound) throw new Error(`event_at ${row.eventAt} is after validateTo`)
 
-          const offer = await prisma.offer.findUnique({ where: { id: row.offerId } })
+          const offer = await prisma.offer.findUnique({ where: { id: row.offerId }, select: { id: true, mmpSource: true, commissionType: true, commissionValue: true, currency: true } })
           if (!offer) throw new Error(`Offer "${row.offerId}" not found`)
           const revenue = row.revenue || 0
           const commissionAmount = offer.commissionType === 'FLAT_CPA'
