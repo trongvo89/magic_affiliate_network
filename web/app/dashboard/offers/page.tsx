@@ -8,7 +8,6 @@ interface Offer {
   appName: string
   pubCommissionDisplay: string | null
   currency: string
-  destinationUrl: string | null
 }
 
 export default function PublisherOffersPage() {
@@ -115,13 +114,6 @@ export default function PublisherOffersPage() {
                   </div>
                 </div>
               </div>
-
-              {o.destinationUrl && (
-                <div className="mb-3">
-                  <div className="text-xs text-gray-500 mb-1">Destination URL</div>
-                  <div className="text-sm text-blue-600 truncate">{o.destinationUrl}</div>
-                </div>
-              )}
 
               {/* Tracking link */}
               <div className="bg-gray-50 rounded-lg p-3 mb-3">
