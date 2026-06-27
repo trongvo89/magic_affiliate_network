@@ -138,10 +138,11 @@ export default async function adminRoutes(server: FastifyInstance) {
 
         await auditLog(prisma, {
           action: 'FIX_CITYADS_CONVERSION',
-          entityType: 'Conversion',
+          entity: 'Conversion',
           entityId: conv.id,
           userId: (request.user as any).id,
-          diff: diffChanges(before, { revenue: newRevenue, commission: newCommission }),
+          userName: (request.user as any).email,
+          changes: diffChanges(before, { revenue: newRevenue, commission: newCommission }) ?? undefined,
         })
       }
     }
