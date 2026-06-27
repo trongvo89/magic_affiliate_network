@@ -115,20 +115,27 @@ export default async function publisherRoutes(server: FastifyInstance) {
     return { daily: Array.from(map.values()) }
   })
 
-  server.get<{ Querystring: { page?: string; limit?: string } }>('/conversions', async (request) => {
+  server.get<{ Querystring: { page?: string; limit?: string; offerId?: string; from?: string; to?: string } }>('/conversions', async (request) => {
     const { id } = request.user as any
-    const { page = '1', limit = '30' } = request.query
+    const { page = '1', limit = '30', offerId, from, to } = request.query
     const skip = (parseInt(page) - 1) * parseInt(limit)
+    const where: any = { publisherId: id }
+    if (offerId) where.offerId = offerId
+    if (from || to) {
+      where.eventAt = {}
+      if (from) where.eventAt.gte = new Date(from + 'T00:00:00Z')
+      if (to) where.eventAt.lte = new Date(to + 'T23:59:59Z')
+    }
 
     const [conversions, total] = await Promise.all([
       prisma.conversion.findMany({
-        where: { publisherId: id },
+        where,
         skip,
         take: parseInt(limit),
         orderBy: { eventAt: 'desc' },
         include: { offer: { select: { name: true, mmpSource: true } } },
       }),
-      prisma.conversion.count({ where: { publisherId: id } }),
+      prisma.conversion.count({ where }),
     ])
 
     return { conversions, total, page: parseInt(page), limit: parseInt(limit) }
