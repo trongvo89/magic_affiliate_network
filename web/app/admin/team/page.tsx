@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { api, fmtDate, getUser } from '@/lib/api'
+import { api, fmtDate, fetchUser } from '@/lib/api'
 
 interface TeamMember {
   id: string
@@ -15,7 +15,9 @@ export default function TeamPage() {
   const [members, setMembers] = useState<TeamMember[]>([])
   const [actionId, setActionId] = useState<string | null>(null)
   const [error, setError] = useState('')
-  const currentUser = getUser()
+  const [currentUser, setCurrentUser] = useState<any>(null)
+
+  useEffect(() => { fetchUser().then(u => setCurrentUser(u)) }, [])
 
   async function load() {
     const { data } = await api.get('/admin/users')

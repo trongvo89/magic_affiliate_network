@@ -25,6 +25,7 @@ interface DailyPoint {
   clicks: number
   conversions: number
   commission: number
+  [key: string]: string | number
 }
 
 type Rates = Record<string, number>

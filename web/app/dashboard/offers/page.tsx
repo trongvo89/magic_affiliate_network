@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { api, fmtMoney, getUser } from '@/lib/api'
+import { api, fmtMoney, fetchUser } from '@/lib/api'
 
 function toDateStr(d: Date) {
   return d.toISOString().slice(0, 10)
@@ -41,7 +41,8 @@ export default function PublisherOffersPage() {
   const [trackingBase, setTrackingBase] = useState('')
   const [from, setFrom] = useState(() => toDateStr(new Date(Date.now() - 30 * 86400000)))
   const [to, setTo] = useState(() => toDateStr(new Date()))
-  const pubId = getUser()?.id ?? ''
+  const [pubId, setPubId] = useState('')
+  useEffect(() => { fetchUser().then(u => setPubId(u?.id ?? '')) }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
