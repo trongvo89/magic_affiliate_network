@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { api, fmtMoney, fmtDate } from '@/lib/api'
+import { api, fmtMoney } from '@/lib/api'
+import { PerformanceChart, CommissionChart } from '@/components/DailyChart'
 
 interface Stats {
   range: {
@@ -19,19 +20,14 @@ interface Stats {
   epc: number
 }
 
-interface Conversion {
-  id: string
-  eventAt: string
-  offer: { name: string }
-  eventType: string
-  revenue: number
-  commissionAmount: number
-  currency: string
-  status: string
+interface DailyPoint {
+  date: string
+  clicks: number
+  conversions: number
+  commission: number
 }
 
 type Rates = Record<string, number>
-
 const DISPLAY_CURRENCIES = ['USD', 'VND', 'RUB']
 
 async function fetchRates(): Promise<Rates> {
@@ -43,33 +39,26 @@ async function fetchRates(): Promise<Rates> {
   return { USD: 1, VND: 25000, RUB: 90 }
 }
 
-function convertAmount(amount: number, fromCurrency: string, toCurrency: string, rates: Rates): number {
-  if (fromCurrency === toCurrency) return amount
-  const fromRate = rates[fromCurrency] || 1
-  const toRate = rates[toCurrency] || 1
-  return (amount / fromRate) * toRate
-}
-
 function aggregateByCurrency(byCurrency: Record<string, number>, targetCurrency: string, rates: Rates): number {
   let total = 0
   for (const [cur, amt] of Object.entries(byCurrency)) {
-    total += convertAmount(amt, cur, targetCurrency, rates)
+    const fromRate = rates[cur] || 1
+    const toRate = rates[targetCurrency] || 1
+    total += (amt / fromRate) * toRate
   }
   return total
 }
 
-function toDateStr(d: Date) {
-  return d.toISOString().slice(0, 10)
-}
+function toDateStr(d: Date) { return d.toISOString().slice(0, 10) }
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null)
-  const [conversions, setConversions] = useState<Conversion[]>([])
+  const [daily, setDaily] = useState<DailyPoint[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [from, setFrom] = useState(() => toDateStr(new Date(Date.now() - 30 * 86400000)))
   const [to, setTo] = useState(() => toDateStr(new Date()))
-  const [displayCurrency, setDisplayCurrency] = useState('USD')
+  const [displayCurrency, setDisplayCurrency] = useState('VND')
   const [rates, setRates] = useState<Rates>({ USD: 1 })
   const [ratesLoaded, setRatesLoaded] = useState(false)
 
@@ -77,12 +66,12 @@ export default function DashboardPage() {
     setLoading(true)
     setError('')
     try {
-      const [s, c] = await Promise.all([
+      const [s, d] = await Promise.all([
         api.get('/publisher/stats', { params: { from, to } }),
-        api.get('/publisher/conversions'),
+        api.get('/publisher/stats/daily', { params: { from, to } }),
       ])
       setStats(s.data)
-      setConversions(c.data.conversions)
+      setDaily(d.data.daily)
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Failed to load data')
     } finally {
@@ -101,93 +90,53 @@ export default function DashboardPage() {
     stats ? aggregateByCurrency(stats.totalApprovedByCurrency, displayCurrency, rates) : 0,
     [stats, displayCurrency, rates])
 
-  const statusBadge = (s: string) => {
-    const cls: Record<string, string> = {
-      APPROVED: 'bg-green-100 text-green-700',
-      PENDING: 'bg-yellow-100 text-yellow-700',
-      REJECTED: 'bg-red-100 text-red-700',
-    }
-    return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cls[s] || 'bg-gray-100 text-gray-600'}`}>{s}</span>
-  }
-
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-gray-900">My Overview</h1>
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={from}
-            max={to}
-            onChange={e => setFrom(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-          />
+        <div className="flex items-center gap-2 flex-wrap">
+          <input type="date" value={from} max={to} onChange={e => setFrom(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
           <span className="text-gray-400">→</span>
-          <input
-            type="date"
-            value={to}
-            min={from}
-            onChange={e => setTo(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-          />
-          {[
-            { label: '7d', days: 7 },
-            { label: '30d', days: 30 },
-            { label: '90d', days: 90 },
-          ].map(({ label, days }) => (
-            <button
-              key={label}
+          <input type="date" value={to} min={from} onChange={e => setTo(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
+          {[{ label: '7d', days: 7 }, { label: '30d', days: 30 }, { label: '90d', days: 90 }].map(({ label, days }) => (
+            <button key={label}
               onClick={() => { setFrom(toDateStr(new Date(Date.now() - days * 86400000))); setTo(toDateStr(new Date())) }}
-              className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-            >
+              className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
               {label}
             </button>
           ))}
           <div className="w-px h-6 bg-gray-200" />
-          <select
-            value={displayCurrency}
-            onChange={(e) => setDisplayCurrency(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-900 font-medium focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-          >
-            {DISPLAY_CURRENCIES.map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
+          <select value={displayCurrency} onChange={e => setDisplayCurrency(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-900 font-medium">
+            {DISPLAY_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
           {ratesLoaded && <span className="text-[10px] text-gray-400">Live rates</span>}
-          <button
-            onClick={load}
-            disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
-          >
+          <button onClick={load} disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">
             <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            {loading ? 'Loading...' : 'Refresh'}
+            Refresh
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-4">
-          {error}
-        </div>
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-4">{error}</div>
       )}
 
       {stats && (
-        <div className="grid grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-xl p-5 border border-gray-200">
             <div className="text-xs text-gray-500 mb-1">Clicks</div>
-            <div className="text-2xl font-bold text-gray-900">{stats.range.clicks}</div>
+            <div className="text-2xl font-bold text-gray-900">{stats.range.clicks.toLocaleString()}</div>
           </div>
           <div className="bg-white rounded-xl p-5 border border-gray-200">
             <div className="text-xs text-gray-500 mb-1">Conversions</div>
-            <div className="text-2xl font-bold text-gray-900">{stats.range.conversions}</div>
-          </div>
-          <div className="bg-white rounded-xl p-5 border border-gray-200">
-            <div className="text-xs text-gray-500 mb-1">CVR</div>
-            <div className={`text-2xl font-bold ${stats.cvr > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
-              {stats.range.clicks > 0 ? `${stats.cvr}%` : '—'}
-            </div>
+            <div className="text-2xl font-bold text-gray-900">{stats.range.conversions.toLocaleString()}</div>
+            <div className="text-xs text-gray-400 mt-0.5">CVR: {stats.cvr > 0 ? `${stats.cvr}%` : '—'}</div>
           </div>
           <div className="bg-white rounded-xl p-5 border border-gray-200">
             <div className="text-xs text-gray-500 mb-1">Earned (range)</div>
@@ -202,41 +151,29 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="p-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-900">Recent Conversions</h2>
-        </div>
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-            <tr>
-              {['Date', 'Offer', 'Event', 'Commission', 'Order Value', 'Status'].map((h) => (
-                <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {conversions.map((c) => (
-              <tr key={c.id} className="hover:bg-gray-50">
-                <td className="px-4 py-2.5 text-gray-500 text-xs whitespace-nowrap">{fmtDate(c.eventAt)}</td>
-                <td className="px-4 py-2.5 font-medium text-gray-900">{c.offer?.name}</td>
-                <td className="px-4 py-2.5 text-gray-600 capitalize">{c.eventType}</td>
-                <td className="px-4 py-2.5 text-green-700 font-medium">
-                  {fmtMoney(convertAmount(c.commissionAmount, c.currency, displayCurrency, rates), displayCurrency)}
-                </td>
-                <td className="px-4 py-2.5 text-gray-400 text-xs">
-                  {fmtMoney(convertAmount(c.revenue, c.currency, displayCurrency, rates), displayCurrency)}
-                </td>
-                <td className="px-4 py-2.5">{statusBadge(c.status)}</td>
-              </tr>
-            ))}
-            {conversions.length === 0 && !loading && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No conversions yet</td></tr>
-            )}
-            {loading && conversions.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
-            )}
-          </tbody>
-        </table>
+      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+        <h2 className="text-sm font-semibold text-gray-700 mb-4">Clicks & Conversions</h2>
+        {daily.length > 0 ? (
+          <PerformanceChart data={daily} lines={[
+            { key: 'clicks', color: '#3b82f6', label: 'Clicks' },
+            { key: 'conversions', color: '#f97316', label: 'Conversions' },
+          ]} />
+        ) : (
+          <div className="h-[280px] flex items-center justify-center text-gray-400 text-sm">
+            {loading ? 'Loading...' : 'No data for selected period'}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="text-sm font-semibold text-gray-700 mb-4">Daily Commission</h2>
+        {daily.length > 0 ? (
+          <CommissionChart data={daily} dataKey="commission" label="Commission" color="#22c55e" />
+        ) : (
+          <div className="h-[220px] flex items-center justify-center text-gray-400 text-sm">
+            {loading ? 'Loading...' : 'No data for selected period'}
+          </div>
+        )}
       </div>
     </div>
   )

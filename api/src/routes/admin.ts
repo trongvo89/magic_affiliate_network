@@ -59,6 +59,43 @@ export default async function adminRoutes(server: FastifyInstance) {
     }
   })
 
+  // Daily time-series for charts
+  server.get<{ Querystring: { days?: string } }>('/stats/daily', async (request) => {
+    const days = Math.min(parseInt(request.query.days || '30'), 90)
+    const since = new Date(Date.now() - days * 86400000)
+
+    const [convRows, clickRows, activePubs] = await Promise.all([
+      prisma.$queryRaw<Array<{ d: string; cnt: bigint; rev: number; comm: number }>>`
+        SELECT DATE("eventAt") as d, COUNT(*)::int as cnt,
+               COALESCE(SUM("revenue"),0) as rev, COALESCE(SUM("commissionAmount"),0) as comm
+        FROM "Conversion" WHERE "eventAt" >= ${since}
+        GROUP BY DATE("eventAt") ORDER BY d`,
+      prisma.$queryRaw<Array<{ d: string; cnt: bigint }>>`
+        SELECT DATE("clickedAt") as d, COUNT(*)::int as cnt
+        FROM "Click" WHERE "clickedAt" >= ${since}
+        GROUP BY DATE("clickedAt") ORDER BY d`,
+      prisma.user.count({ where: { role: 'PUBLISHER', status: 'ACTIVE' } }),
+    ])
+
+    const map = new Map<string, { date: string; clicks: number; conversions: number; commission: number; revenue: number }>()
+    for (let i = 0; i < days; i++) {
+      const d = new Date(Date.now() - (days - 1 - i) * 86400000).toISOString().slice(0, 10)
+      map.set(d, { date: d, clicks: 0, conversions: 0, commission: 0, revenue: 0 })
+    }
+    for (const r of convRows) {
+      const key = new Date(r.d).toISOString().slice(0, 10)
+      const entry = map.get(key)
+      if (entry) { entry.conversions = Number(r.cnt); entry.commission = Number(r.comm); entry.revenue = Number(r.rev) }
+    }
+    for (const r of clickRows) {
+      const key = new Date(r.d).toISOString().slice(0, 10)
+      const entry = map.get(key)
+      if (entry) entry.clicks = Number(r.cnt)
+    }
+
+    return { daily: Array.from(map.values()), activePublishers: activePubs }
+  })
+
   // Conversions list (paginated + filterable)
   server.get<{ Querystring: { page?: string; limit?: string; offerId?: string; publisherId?: string; status?: string; from?: string; to?: string } }>(
     '/conversions',
