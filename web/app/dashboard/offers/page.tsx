@@ -1,103 +1,37 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
-import { api, fmtMoney, fmtDate, fetchUser } from '@/lib/api'
+import { useEffect, useState } from 'react'
+import { api, fetchUser } from '@/lib/api'
 
-function toDateStr(d: Date) {
-  return d.toISOString().slice(0, 10)
-}
-
-interface OfferSummary {
-  offerId: string
-  offerName: string
-  mmpSource: string
-  currency: string
-  total: number
-  approved: number
-  pending: number
-  rejected: number
-  commissionEarned: number
-  totalRevenue: number
-  clicks: number
-  cvr: number
-  epc: number
-}
-
-interface Conversion {
-  id: string
-  xid: string
-  status: string
-  revenue: number
-  commissionAmount: number
-  currency: string
-  eventAt: string
-  offer: { name: string; mmpSource: string }
-}
-
-interface CityAdsOffer {
+interface Offer {
   id: string
   name: string
   appName: string
   pubCommissionDisplay: string | null
+  currency: string
+  destinationUrl: string | null
 }
 
 export default function PublisherOffersPage() {
-  const [data, setData] = useState<OfferSummary[]>([])
-  const [cityAdsOffers, setCityAdsOffers] = useState<CityAdsOffer[]>([])
+  const [offers, setOffers] = useState<Offer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
   const [copied, setCopied] = useState<string | null>(null)
-  const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [exporting, setExporting] = useState(false)
-  const [exportOfferId, setExportOfferId] = useState('')
   const [trackingBase, setTrackingBase] = useState('')
-  const [from, setFrom] = useState(() => toDateStr(new Date(Date.now() - 30 * 86400000)))
-  const [to, setTo] = useState(() => toDateStr(new Date()))
   const [pubId, setPubId] = useState('')
-  const [expandedOffer, setExpandedOffer] = useState<string | null>(null)
-  const [conversions, setConversions] = useState<Conversion[]>([])
-  const [convLoading, setConvLoading] = useState(false)
-  const [convTotal, setConvTotal] = useState(0)
-  const [convPage, setConvPage] = useState(1)
+  const [deeplinkOfferId, setDeeplinkOfferId] = useState<string | null>(null)
+  const [deeplinkUrl, setDeeplinkUrl] = useState('')
+  const [deeplinkCopied, setDeeplinkCopied] = useState(false)
+
   useEffect(() => { fetchUser().then(u => setPubId(u?.id ?? '')) }, [])
 
-  const load = useCallback(async () => {
+  useEffect(() => {
     setLoading(true)
-    setError('')
-    try {
-      const [summaryRes, cityAdsRes] = await Promise.all([
-        api.get('/publisher/offers-summary', { params: { from, to } }),
-        api.get('/publisher/cityads-offers'),
-      ])
-      setData(summaryRes.data)
-      setCityAdsOffers(cityAdsRes.data)
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Failed to load')
-    } finally {
-      setLoading(false)
-    }
-  }, [from, to])
-
-  useEffect(() => { load(); setExpandedOffer(null); setConversions([]) }, [load])
-
-  async function toggleOffer(offerId: string, page = 1) {
-    if (expandedOffer === offerId && page === 1) {
-      setExpandedOffer(null)
-      setConversions([])
-      return
-    }
-    setExpandedOffer(offerId)
-    setConvLoading(true)
-    setConvPage(page)
-    try {
-      const { data } = await api.get('/publisher/conversions', { params: { offerId, from, to, page, limit: 10 } })
-      setConversions(data.conversions)
-      setConvTotal(data.total)
-    } catch {
-      setConversions([])
-    } finally {
-      setConvLoading(false)
-    }
-  }
+    api.get('/publisher/offers-list')
+      .then(r => setOffers(r.data))
+      .catch(err => setError(err.response?.data?.error || err.message || 'Failed to load'))
+      .finally(() => setLoading(false))
+  }, [])
 
   useEffect(() => {
     api.get('/config/public').then(res => {
@@ -111,75 +45,42 @@ export default function PublisherOffersPage() {
     return `${base}/click/t/${offerId}?pub=${pubId}`
   }
 
-  function copyId(id: string) {
-    navigator.clipboard.writeText(id)
-    setCopiedId(id)
-    setTimeout(() => setCopiedId(null), 1500)
+  function generateDeeplink(offerId: string, url: string) {
+    if (typeof window === 'undefined') return ''
+    const base = trackingBase || `${window.location.origin}/api-proxy`
+    return `${base}/click/t/${offerId}?pub=${pubId}&url=${encodeURIComponent(url)}`
   }
 
-  async function exportCsv() {
-    setExporting(true)
-    try {
-      const params = new URLSearchParams({ from, to })
-      if (exportOfferId) params.set('offerId', exportOfferId)
-      const { data } = await api.get(`/publisher/conversions/export?${params}`, { responseType: 'blob' })
-      const url = URL.createObjectURL(new Blob([data], { type: 'text/csv' }))
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `my_conversions_${new Date().toISOString().slice(0, 10)}.csv`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Export failed')
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  async function copyLink(offerId: string) {
-    const link = trackingLink(offerId)
-    await navigator.clipboard.writeText(link)
-    setCopied(offerId)
+  async function copyText(text: string, id: string) {
+    await navigator.clipboard.writeText(text)
+    setCopied(id)
     setTimeout(() => setCopied(null), 2000)
   }
 
-  const mmpBadge = (s: string) => {
-    const styles: Record<string, string> = {
-      APPSFLYER: 'bg-blue-100 text-blue-700',
-      ADJUST: 'bg-purple-100 text-purple-700',
-      CITYADS: 'bg-orange-100 text-orange-700',
-    }
-    return <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles[s] ?? 'bg-gray-100 text-gray-600'}`}>{s}</span>
-  }
-
-  const totalCommission = data.reduce((s, d) => s + d.commissionEarned, 0)
-  const totalConversions = data.reduce((s, d) => s + d.total, 0)
-  const totalClicks = data.reduce((s, d) => s + (d.clicks ?? 0), 0)
+  const filtered = offers.filter(o =>
+    o.name.toLowerCase().includes(search.toLowerCase()) ||
+    o.appName.toLowerCase().includes(search.toLowerCase())
+  )
 
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold text-gray-900">Offers Performance</h1>
-        <div className="flex items-center gap-2">
-          <input type="date" value={from} max={to} onChange={e => setFrom(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-          <span className="text-gray-400">→</span>
-          <input type="date" value={to} min={from} onChange={e => setTo(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-          {[{ label: '7d', days: 7 }, { label: '30d', days: 30 }, { label: '90d', days: 90 }].map(({ label, days }) => (
-            <button key={label}
-              onClick={() => { setFrom(toDateStr(new Date(Date.now() - days * 86400000))); setTo(toDateStr(new Date())) }}
-              className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-            >{label}</button>
-          ))}
-          <button onClick={load} disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
-          >
-            <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            {loading ? 'Loading...' : 'Refresh'}
-          </button>
+        <h1 className="text-xl font-bold text-gray-900">Offers</h1>
+      </div>
+
+      {/* Search bar */}
+      <div className="mb-6">
+        <div className="relative max-w-md">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Tìm kiếm offer..."
+            className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+          />
         </div>
       </div>
 
@@ -187,191 +88,101 @@ export default function PublisherOffersPage() {
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-4">{error}</div>
       )}
 
-      {data.length > 0 && (
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          {[
-            { label: 'Active Offers', value: data.length, fmt: false, color: 'text-gray-900' },
-            { label: 'Clicks', value: totalClicks, fmt: false, color: 'text-gray-900' },
-            { label: 'Approved Conversions', value: data.reduce((s, d) => s + d.approved, 0), fmt: false, color: 'text-gray-900' },
-            { label: 'Commission Earned', value: totalCommission, fmt: true, color: 'text-green-600' },
-          ].map((card) => (
-            <div key={card.label} className="bg-white rounded-xl p-5 border border-gray-200">
-              <div className="text-xs text-gray-500 mb-1">{card.label}</div>
-              <div className={`text-2xl font-bold ${card.color}`}>
-                {card.fmt ? fmtMoney(card.value as number) : card.value}
+      {loading && (
+        <div className="text-center text-gray-400 py-12">Loading...</div>
+      )}
+
+      {!loading && filtered.length === 0 && (
+        <div className="text-center text-gray-400 py-12">
+          {search ? 'Không tìm thấy offer nào' : 'Chưa có offer nào'}
+        </div>
+      )}
+
+      {/* Offer cards */}
+      <div className="space-y-4">
+        {filtered.map(o => (
+          <div key={o.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="p-5">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-base">{o.name}</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">{o.appName}</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-gray-500 mb-0.5">Commission</div>
+                  <div className="font-semibold text-orange-600">
+                    {o.pubCommissionDisplay || '—'}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
 
-      {cityAdsOffers.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
-          <div className="p-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900">Tracking Links</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Copy your unique link for each offer and use it to drive traffic</p>
-          </div>
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-              <tr>
-                {['Offer', 'Commission', 'Your Tracking Link'].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {cityAdsOffers.map((o) => (
-                <tr key={o.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900">{o.name}</div>
-                    <div className="text-xs text-gray-400">{o.appName}</div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                    {o.pubCommissionDisplay || <span className="text-gray-400">—</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs text-gray-500 truncate max-w-xs">
-                        {pubId ? trackingLink(o.id) : '—'}
-                      </span>
-                      <button
-                        onClick={() => copyLink(o.id)}
-                        className={`flex-shrink-0 text-xs px-2.5 py-1 rounded-md font-medium border transition-colors ${
-                          copied === o.id
-                            ? 'bg-green-50 border-green-200 text-green-700'
-                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                        }`}
-                      >
-                        {copied === o.id ? 'Copied!' : 'Copy'}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              {o.destinationUrl && (
+                <div className="mb-3">
+                  <div className="text-xs text-gray-500 mb-1">Destination URL</div>
+                  <div className="text-sm text-blue-600 truncate">{o.destinationUrl}</div>
+                </div>
+              )}
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900">By Offer</h2>
-          <div className="flex items-center gap-2">
-            <select value={exportOfferId} onChange={e => setExportOfferId(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 text-gray-600">
-              <option value="">All Offers</option>
-              {data.map(row => (
-                <option key={row.offerId} value={row.offerId}>{row.offerName}</option>
-              ))}
-            </select>
-            <button onClick={exportCsv} disabled={exporting}
-              className="flex items-center gap-1.5 text-sm border border-gray-200 hover:bg-gray-50 disabled:opacity-50 text-gray-600 px-3 py-1.5 rounded-lg font-medium transition-colors">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              {exporting ? 'Exporting...' : 'Export CSV'}
-            </button>
-          </div>
-        </div>
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-            <tr>
-              {['Offer ID', 'Offer', 'Clicks', 'Approved', 'Pending', 'Rejected', 'CVR', 'EPC', 'Commission Earned'].map((h) => (
-                <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {data.map((row) => (
-              <>
-                <tr key={row.offerId} className="hover:bg-gray-50 cursor-pointer" onClick={() => toggleOffer(row.offerId)}>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${expandedOffer === row.offerId ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                      </svg>
-                      <code className="text-xs font-mono text-gray-400 truncate max-w-[90px]">{row.offerId}</code>
-                      <button onClick={(e) => { e.stopPropagation(); copyId(row.offerId) }} className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors whitespace-nowrap ${copiedId === row.offerId ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
-                        {copiedId === row.offerId ? '✓' : 'Copy'}
-                      </button>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{row.offerName}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{row.clicks ?? 0}</td>
-                  <td className="px-4 py-3 font-medium text-green-700">{row.approved}</td>
-                  <td className="px-4 py-3 font-medium text-yellow-600">{row.pending}</td>
-                  <td className="px-4 py-3 font-medium text-red-500">{row.rejected}</td>
-                  <td className="px-4 py-3 text-blue-600 font-medium">{(row.clicks ?? 0) > 0 ? `${row.cvr}%` : '—'}</td>
-                  <td className="px-4 py-3 text-indigo-600 font-medium">{(row.clicks ?? 0) > 0 ? `$${row.epc}` : '—'}</td>
-                  <td className="px-4 py-3 font-semibold text-green-700">{fmtMoney(row.commissionEarned, row.currency)}</td>
-                </tr>
-                {expandedOffer === row.offerId && (
-                  <tr key={`${row.offerId}-detail`}>
-                    <td colSpan={9} className="bg-slate-50 px-0 py-0">
-                      <div className="px-6 py-4">
-                        <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Conversion Details</h3>
-                        {convLoading ? (
-                          <div className="text-center text-gray-400 text-sm py-4">Loading conversions...</div>
-                        ) : conversions.length === 0 ? (
-                          <div className="text-center text-gray-400 text-sm py-4">No conversions found</div>
-                        ) : (
-                          <>
-                            <table className="w-full text-xs">
-                              <thead className="text-gray-400 uppercase">
-                                <tr>
-                                  {['XID', 'Status', 'Order Value', 'Commission', 'Currency', 'Date'].map(h => (
-                                    <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-200">
-                                {conversions.map(c => (
-                                  <tr key={c.id} className="hover:bg-white">
-                                    <td className="px-3 py-2 font-mono text-gray-600">{c.xid || '—'}</td>
-                                    <td className="px-3 py-2">
-                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                                        c.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
-                                        c.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
-                                        'bg-yellow-100 text-yellow-700'
-                                      }`}>{c.status}</span>
-                                    </td>
-                                    <td className="px-3 py-2 text-gray-700">{fmtMoney(c.revenue, c.currency)}</td>
-                                    <td className="px-3 py-2 font-semibold text-green-700">{fmtMoney(c.commissionAmount, c.currency)}</td>
-                                    <td className="px-3 py-2 text-gray-500">{c.currency}</td>
-                                    <td className="px-3 py-2 text-gray-500">{fmtDate(c.eventAt)}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                            {convTotal > 10 && (
-                              <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
-                                <span className="text-xs text-gray-400">{convTotal} total conversions</span>
-                                <div className="flex gap-1">
-                                  {Array.from({ length: Math.ceil(convTotal / 10) }, (_, i) => (
-                                    <button key={i} onClick={(e) => { e.stopPropagation(); toggleOffer(row.offerId, i + 1) }}
-                                      className={`px-2.5 py-1 text-xs rounded ${convPage === i + 1 ? 'bg-orange-500 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                                      {i + 1}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        )}
+              {/* Tracking link */}
+              <div className="bg-gray-50 rounded-lg p-3 mb-3">
+                <div className="text-xs text-gray-500 mb-1.5">Tracking Link</div>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs font-mono text-gray-600 truncate flex-1">
+                    {pubId ? trackingLink(o.id) : '—'}
+                  </code>
+                  <button onClick={() => copyText(trackingLink(o.id), `link-${o.id}`)}
+                    className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-md font-medium border transition-colors ${
+                      copied === `link-${o.id}` ? 'bg-green-50 border-green-200 text-green-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}>
+                    {copied === `link-${o.id}` ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Deeplink toggle */}
+              <button
+                onClick={() => { setDeeplinkOfferId(deeplinkOfferId === o.id ? null : o.id); setDeeplinkUrl(''); setDeeplinkCopied(false) }}
+                className="text-xs text-orange-600 hover:text-orange-700 font-medium flex items-center gap-1">
+                <svg className={`w-3.5 h-3.5 transition-transform ${deeplinkOfferId === o.id ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+                Tạo Deeplink
+              </button>
+
+              {deeplinkOfferId === o.id && (
+                <div className="mt-3 bg-orange-50 rounded-lg p-3 border border-orange-100">
+                  <div className="text-xs text-gray-600 mb-2">Nhập URL đích để tạo deeplink tracking:</div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <input
+                      type="url"
+                      value={deeplinkUrl}
+                      onChange={e => { setDeeplinkUrl(e.target.value); setDeeplinkCopied(false) }}
+                      placeholder="https://example.com/product/123"
+                      className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  {deeplinkUrl && (
+                    <div className="bg-white rounded-lg p-2.5 border border-orange-200">
+                      <div className="text-[10px] text-gray-400 mb-1 uppercase font-medium">Deeplink</div>
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs font-mono text-gray-600 truncate flex-1">
+                          {generateDeeplink(o.id, deeplinkUrl)}
+                        </code>
+                        <button
+                          onClick={() => { copyText(generateDeeplink(o.id, deeplinkUrl), `deep-${o.id}`); setDeeplinkCopied(true) }}
+                          className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-md font-medium border transition-colors ${
+                            copied === `deep-${o.id}` ? 'bg-green-50 border-green-200 text-green-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                          }`}>
+                          {copied === `deep-${o.id}` ? 'Copied!' : 'Copy'}
+                        </button>
                       </div>
-                    </td>
-                  </tr>
-                )}
-              </>
-            ))}
-            {data.length === 0 && !loading && (
-              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No offer data for this period</td></tr>
-            )}
-            {loading && (
-              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
-            )}
-          </tbody>
-        </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

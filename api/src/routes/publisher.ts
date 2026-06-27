@@ -300,6 +300,15 @@ export default async function publisherRoutes(server: FastifyInstance) {
     return offers
   })
 
+  server.get('/offers-list', async () => {
+    const offers = await prisma.offer.findMany({
+      where: { status: 'ACTIVE' },
+      select: { id: true, name: true, appName: true, pubCommissionDisplay: true, currency: true, destinationUrl: true },
+      orderBy: { createdAt: 'desc' },
+    })
+    return offers
+  })
+
   server.get('/profile', async (request) => {
     const { id } = request.user as any
     const user = await prisma.user.findUnique({ where: { id }, select: { id: true, email: true, name: true, postbackUrl: true, status: true, createdAt: true } })
