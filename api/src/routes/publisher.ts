@@ -306,7 +306,7 @@ export default async function publisherRoutes(server: FastifyInstance) {
   server.get('/offers-list', async () => {
     const offers = await prisma.offer.findMany({
       where: { status: 'ACTIVE' },
-      select: { id: true, name: true, appName: true, pubCommissionDisplay: true, currency: true, logoUrl: true },
+      select: { id: true, name: true, appName: true, pubCommissionDisplay: true, currency: true },
       orderBy: { createdAt: 'desc' },
     })
     return offers
