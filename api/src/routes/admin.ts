@@ -96,6 +96,59 @@ export default async function adminRoutes(server: FastifyInstance) {
     return { daily: Array.from(map.values()), activePublishers: activePubs }
   })
 
+  // Fix historical CityAds conversions — recalculate with exchange rate
+  server.post('/fix-cityads-conversions', async (request) => {
+    const exchangeRate = parseFloat(process.env.CITYADS_EXCHANGE_RATE || '1')
+    if (exchangeRate <= 1) {
+      return { error: 'CITYADS_EXCHANGE_RATE not set or invalid', updated: 0 }
+    }
+
+    const conversions = await prisma.conversion.findMany({
+      where: { sourceType: 'CITYADS' },
+      include: { offer: { select: { commissionType: true, commissionValue: true } } },
+    })
+
+    const results: { id: string; before: { revenue: number; commission: number }; after: { revenue: number; commission: number } }[] = []
+
+    for (const conv of conversions) {
+      const raw = conv.rawPayload as Record<string, any>
+      const openCommission = parseFloat(raw.open_commission || '0') || 0
+      const payout = parseFloat(raw.payout || '0') || 0
+      const orderTotal = parseFloat(raw.order_total || '0') || 0
+
+      const networkCommission = payout > 0 ? payout : (openCommission * exchangeRate)
+      const newRevenue = orderTotal > 0 ? orderTotal : 0
+
+      let newCommission = 0
+      if (networkCommission > 0 && conv.offer) {
+        if (conv.offer.commissionType === 'FLAT_CPA') {
+          newCommission = conv.offer.commissionValue
+        } else {
+          newCommission = parseFloat((networkCommission * conv.offer.commissionValue / 100).toFixed(2))
+        }
+      }
+
+      if (Math.abs(conv.commissionAmount - newCommission) > 0.01 || Math.abs(conv.revenue - newRevenue) > 0.01) {
+        const before = { revenue: conv.revenue, commission: conv.commissionAmount }
+        await prisma.conversion.update({
+          where: { id: conv.id },
+          data: { revenue: newRevenue, commissionAmount: newCommission },
+        })
+        results.push({ id: conv.id, before, after: { revenue: newRevenue, commission: newCommission } })
+
+        await auditLog(prisma, {
+          action: 'FIX_CITYADS_CONVERSION',
+          entityType: 'Conversion',
+          entityId: conv.id,
+          userId: (request.user as any).id,
+          diff: diffChanges(before, { revenue: newRevenue, commission: newCommission }),
+        })
+      }
+    }
+
+    return { updated: results.length, total: conversions.length, exchangeRate, details: results }
+  })
+
   // Conversions list (paginated + filterable)
   server.get<{ Querystring: { page?: string; limit?: string; offerId?: string; publisherId?: string; status?: string; from?: string; to?: string } }>(
     '/conversions',

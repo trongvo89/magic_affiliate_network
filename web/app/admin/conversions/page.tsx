@@ -46,6 +46,24 @@ export default function ConversionsPage() {
   const [manualSaving, setManualSaving] = useState(false)
   const [manualMsg, setManualMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
+  // Fix CityAds
+  const [fixing, setFixing] = useState(false)
+  const [fixResult, setFixResult] = useState<{ updated: number; total: number } | null>(null)
+
+  async function fixCityAds() {
+    if (!confirm('Recalculate all CityAds conversions with current exchange rate?')) return
+    setFixing(true)
+    try {
+      const { data } = await api.post('/admin/fix-cityads-conversions')
+      setFixResult({ updated: data.updated, total: data.total })
+      load()
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Fix failed')
+    } finally {
+      setFixing(false)
+    }
+  }
+
   // CSV modal
   const [showCsv, setShowCsv] = useState(false)
   const [csvTab, setCsvTab] = useState<'create' | 'update'>('create')
@@ -343,8 +361,19 @@ export default function ConversionsPage() {
             className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-medium">
             + Add Manual
           </button>
+          <button onClick={fixCityAds} disabled={fixing}
+            className="text-sm bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg font-medium">
+            {fixing ? 'Fixing...' : 'Fix CityAds Rates'}
+          </button>
         </div>
       </div>
+
+      {fixResult && (
+        <div className="bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-4 py-3 mb-4">
+          Fixed {fixResult.updated}/{fixResult.total} CityAds conversions with exchange rate.
+          <button onClick={() => setFixResult(null)} className="ml-2 underline">Dismiss</button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 grid grid-cols-5 gap-3">

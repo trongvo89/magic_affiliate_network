@@ -181,7 +181,7 @@ export default async function postbackRoutes(server: FastifyInstance) {
     const openCommission = parseFloat(query.open_commission || '0') || 0
     const payout = parseFloat(query.payout || '0') || 0
     const exchangeRate = parseFloat(process.env.CITYADS_EXCHANGE_RATE || '1')
-    const orderTotal = parseFloat(query.order_total || query.order_amount || '0') || 0
+    const orderTotal = parseFloat(query.order_total || '0') || 0
     const revenue = orderTotal
     const networkCommission = payout > 0 ? payout : (openCommission * exchangeRate)
     const rawCurrency = query.payout_currency || query.order_total_currency || null
