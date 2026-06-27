@@ -28,6 +28,11 @@ interface DailyPoint {
   [key: string]: any
 }
 
+interface OfferOption {
+  offerId: string
+  offerName: string
+}
+
 type Rates = Record<string, number>
 const DISPLAY_CURRENCIES = ['USD', 'VND', 'RUB']
 
@@ -52,6 +57,37 @@ function convertByCurrency(byCurrency: Record<string, number>, targetCurrency: s
 
 function toDateStr(d: Date) { return d.toISOString().slice(0, 10) }
 
+function startOfWeek(d: Date) {
+  const day = d.getDay()
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+  return new Date(d.getFullYear(), d.getMonth(), diff)
+}
+
+type Preset = 'today' | 'yesterday' | 'week' | 'month' | 'custom'
+
+const PRESETS: { key: Preset; label: string }[] = [
+  { key: 'today', label: 'Hôm nay' },
+  { key: 'yesterday', label: 'Hôm qua' },
+  { key: 'week', label: 'Tuần này' },
+  { key: 'month', label: 'Tháng này' },
+  { key: 'custom', label: 'Tùy chỉnh' },
+]
+
+function computePresetDates(preset: Preset): { from: string; to: string } | null {
+  const now = new Date()
+  const today = toDateStr(now)
+  switch (preset) {
+    case 'today': return { from: today, to: today }
+    case 'yesterday': {
+      const y = toDateStr(new Date(now.getTime() - 86400000))
+      return { from: y, to: y }
+    }
+    case 'week': return { from: toDateStr(startOfWeek(now)), to: today }
+    case 'month': return { from: toDateStr(new Date(now.getFullYear(), now.getMonth(), 1)), to: today }
+    default: return null
+  }
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [daily, setDaily] = useState<DailyPoint[]>([])
@@ -59,17 +95,28 @@ export default function DashboardPage() {
   const [error, setError] = useState('')
   const [from, setFrom] = useState(() => toDateStr(new Date(Date.now() - 30 * 86400000)))
   const [to, setTo] = useState(() => toDateStr(new Date()))
+  const [preset, setPreset] = useState<Preset>('month')
   const [displayCurrency, setDisplayCurrency] = useState('VND')
   const [rates, setRates] = useState<Rates>({ USD: 1 })
   const [ratesLoaded, setRatesLoaded] = useState(false)
+  const [offerId, setOfferId] = useState('')
+  const [offers, setOffers] = useState<OfferOption[]>([])
+
+  // Initialize with "Tháng này" preset
+  useEffect(() => {
+    const dates = computePresetDates('month')
+    if (dates) { setFrom(dates.from); setTo(dates.to) }
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
+      const params: any = { from, to }
+      if (offerId) params.offerId = offerId
       const [s, d] = await Promise.all([
-        api.get('/publisher/stats', { params: { from, to } }),
-        api.get('/publisher/stats/daily', { params: { from, to } }),
+        api.get('/publisher/stats', { params }),
+        api.get('/publisher/stats/daily', { params }),
       ])
       setStats(s.data)
       setDaily(d.data.daily)
@@ -78,10 +125,26 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
+  }, [from, to, offerId])
+
+  // Load offer list for dropdown
+  useEffect(() => {
+    api.get('/publisher/offers-summary', { params: { from, to } })
+      .then(r => {
+        const list = (r.data as any[]).map((o: any) => ({ offerId: o.offerId, offerName: o.offerName }))
+        setOffers(list)
+      })
+      .catch(() => {})
   }, [from, to])
 
   useEffect(() => { load() }, [load])
   useEffect(() => { fetchRates().then(r => { setRates(r); setRatesLoaded(true) }) }, [])
+
+  function applyPreset(p: Preset) {
+    setPreset(p)
+    const dates = computePresetDates(p)
+    if (dates) { setFrom(dates.from); setTo(dates.to) }
+  }
 
   const openCommission = useMemo(() =>
     stats ? convertByCurrency(stats.range.earnedByCurrency, displayCurrency, rates) : 0,
@@ -98,22 +161,9 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-gray-900">My Overview</h1>
-        <div className="flex items-center gap-2 flex-wrap">
-          <input type="date" value={from} max={to} onChange={e => setFrom(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
-          <span className="text-gray-400">→</span>
-          <input type="date" value={to} min={from} onChange={e => setTo(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
-          {[{ label: '7d', days: 7 }, { label: '30d', days: 30 }, { label: '90d', days: 90 }].map(({ label, days }) => (
-            <button key={label}
-              onClick={() => { setFrom(toDateStr(new Date(Date.now() - days * 86400000))); setTo(toDateStr(new Date())) }}
-              className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
-              {label}
-            </button>
-          ))}
-          <div className="w-px h-6 bg-gray-200" />
+        <div className="flex items-center gap-2">
           <select value={displayCurrency} onChange={e => setDisplayCurrency(e.target.value)}
             className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-900 font-medium">
             {DISPLAY_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -127,6 +177,42 @@ export default function DashboardPage() {
             Refresh
           </button>
         </div>
+      </div>
+
+      {/* Filters row */}
+      <div className="flex items-center gap-2 flex-wrap mb-6">
+        {/* Time presets */}
+        {PRESETS.map(({ key, label }) => (
+          <button key={key}
+            onClick={() => applyPreset(key)}
+            className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
+              preset === key
+                ? 'bg-orange-500 text-white border-orange-500'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}>
+            {label}
+          </button>
+        ))}
+
+        {/* Custom date inputs */}
+        {preset === 'custom' && (
+          <>
+            <input type="date" value={from} max={to} onChange={e => setFrom(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
+            <span className="text-gray-400">→</span>
+            <input type="date" value={to} min={from} onChange={e => setTo(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
+          </>
+        )}
+
+        <div className="w-px h-6 bg-gray-200" />
+
+        {/* Campaign filter */}
+        <select value={offerId} onChange={e => setOfferId(e.target.value)}
+          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-900">
+          <option value="">Tất cả campaign</option>
+          {offers.map(o => <option key={o.offerId} value={o.offerId}>{o.offerName}</option>)}
+        </select>
       </div>
 
       {error && (

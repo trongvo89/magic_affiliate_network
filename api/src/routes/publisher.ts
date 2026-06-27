@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyRequest } from 'fastify'
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { auditLog } from '../lib/audit'
 
@@ -31,9 +31,9 @@ export default async function publisherRoutes(server: FastifyInstance) {
     }
   })
 
-  server.get<{ Querystring: { from?: string; to?: string } }>('/stats', async (request) => {
+  server.get<{ Querystring: { from?: string; to?: string; offerId?: string } }>('/stats', async (request) => {
     const { id } = request.user as any
-    const { from, to } = request.query
+    const { from, to, offerId } = request.query
 
     const now = new Date()
     const defaultFrom = new Date(now.getTime() - 30 * 86400000)
@@ -41,12 +41,15 @@ export default async function publisherRoutes(server: FastifyInstance) {
     const toDate = (() => { const d = parseDate(to) ?? now; d.setHours(23, 59, 59, 999); return d })()
 
     const dateRange = { gte: fromDate, lte: toDate }
+    const convWhere: any = { publisherId: id, eventAt: dateRange }
+    const clickWhere: any = { publisherId: id, clickedAt: dateRange }
+    if (offerId) { convWhere.offerId = offerId; clickWhere.offerId = offerId }
 
     const [rangeConv, rangeApproved, rangeClicks, totalApprovedByCur] = await Promise.all([
-      prisma.conversion.groupBy({ by: ['currency'], where: { publisherId: id, eventAt: dateRange }, _sum: { commissionAmount: true }, _count: { _all: true } }),
-      prisma.conversion.groupBy({ by: ['currency'], where: { publisherId: id, status: 'APPROVED', eventAt: dateRange }, _sum: { commissionAmount: true }, _count: { _all: true } }),
-      prisma.click.count({ where: { publisherId: id, clickedAt: dateRange } }),
-      prisma.conversion.groupBy({ by: ['currency'], where: { publisherId: id, status: 'APPROVED' }, _sum: { commissionAmount: true }, _count: { _all: true } }),
+      prisma.conversion.groupBy({ by: ['currency'], where: convWhere, _sum: { commissionAmount: true }, _count: { _all: true } }),
+      prisma.conversion.groupBy({ by: ['currency'], where: { ...convWhere, status: 'APPROVED' }, _sum: { commissionAmount: true }, _count: { _all: true } }),
+      prisma.click.count({ where: clickWhere }),
+      prisma.conversion.groupBy({ by: ['currency'], where: { publisherId: id, status: 'APPROVED', ...(offerId ? { offerId } : {}) }, _sum: { commissionAmount: true }, _count: { _all: true } }),
     ])
 
     const totalConversions = rangeConv.reduce((s, r) => s + r._count._all, 0)
@@ -84,21 +87,23 @@ export default async function publisherRoutes(server: FastifyInstance) {
   })
 
   // Daily time-series for publisher charts
-  server.get<{ Querystring: { from?: string; to?: string } }>('/stats/daily', async (request) => {
+  server.get<{ Querystring: { from?: string; to?: string; offerId?: string } }>('/stats/daily', async (request) => {
     const { id } = request.user as any
-    const { from, to } = request.query
+    const { from, to, offerId } = request.query
     const now = new Date()
     const fromDate = parseDate(from) ?? new Date(now.getTime() - 30 * 86400000)
     const toDate = (() => { const d = parseDate(to) ?? now; d.setHours(23, 59, 59, 999); return d })()
 
+    const offerFilter = offerId ? Prisma.sql`AND "offerId" = ${offerId}` : Prisma.empty
+
     const [convRows, clickRows] = await Promise.all([
       prisma.$queryRaw<Array<{ d: string; cur: string; cnt: bigint; comm: number }>>`
         SELECT DATE("eventAt") as d, "currency" as cur, COUNT(*)::int as cnt, COALESCE(SUM("commissionAmount"),0) as comm
-        FROM "Conversion" WHERE "publisherId" = ${id} AND "eventAt" >= ${fromDate} AND "eventAt" <= ${toDate}
+        FROM "Conversion" WHERE "publisherId" = ${id} AND "eventAt" >= ${fromDate} AND "eventAt" <= ${toDate} ${offerFilter}
         GROUP BY DATE("eventAt"), "currency" ORDER BY d`,
       prisma.$queryRaw<Array<{ d: string; cnt: bigint }>>`
         SELECT DATE("clickedAt") as d, COUNT(*)::int as cnt
-        FROM "Click" WHERE "publisherId" = ${id} AND "clickedAt" >= ${fromDate} AND "clickedAt" <= ${toDate}
+        FROM "Click" WHERE "publisherId" = ${id} AND "clickedAt" >= ${fromDate} AND "clickedAt" <= ${toDate} ${offerFilter}
         GROUP BY DATE("clickedAt") ORDER BY d`,
     ])
 
