@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { api, fmtMoney, fmtDate } from '@/lib/api'
 
 function toDateStr(d: Date) { return d.toISOString().slice(0, 10) }
@@ -19,6 +19,26 @@ const PRESETS: { key: Preset; label: string }[] = [
   { key: 'month', label: 'Tháng này' },
   { key: 'custom', label: 'Tùy chỉnh' },
 ]
+
+const DISPLAY_CURRENCIES = ['USD', 'VND', 'RUB']
+
+type Rates = Record<string, number>
+
+async function fetchRates(): Promise<Rates> {
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/USD')
+    const data = await res.json()
+    if (data.result === 'success') return data.rates
+  } catch {}
+  return { USD: 1, VND: 25000, RUB: 90 }
+}
+
+function convertAmount(amount: number, fromCurrency: string, toCurrency: string, rates: Rates): number {
+  if (fromCurrency === toCurrency) return amount
+  const fromRate = rates[fromCurrency] || 1
+  const toRate = rates[toCurrency] || 1
+  return (amount / fromRate) * toRate
+}
 
 function computePresetDates(preset: Preset): { from: string; to: string } | null {
   const now = new Date()
@@ -42,6 +62,7 @@ interface OfferSummary {
   pending: number
   rejected: number
   commissionEarned: number
+  pendingCommission: number
   totalRevenue: number
   clicks: number
   cvr: number
@@ -50,7 +71,7 @@ interface OfferSummary {
 
 interface Conversion {
   id: string
-  xid: string
+  sourceRefId: string
   status: string
   revenue: number
   commissionAmount: number
@@ -66,6 +87,9 @@ export default function ReportPage() {
   const [from, setFrom] = useState(() => { const d = computePresetDates('month'); return d?.from ?? toDateStr(new Date()) })
   const [to, setTo] = useState(() => toDateStr(new Date()))
   const [preset, setPreset] = useState<Preset>('month')
+  const [displayCurrency, setDisplayCurrency] = useState('VND')
+  const [rates, setRates] = useState<Rates>({ USD: 1 })
+  const [ratesLoaded, setRatesLoaded] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   const [exportOfferId, setExportOfferId] = useState('')
@@ -74,6 +98,8 @@ export default function ReportPage() {
   const [convLoading, setConvLoading] = useState(false)
   const [convTotal, setConvTotal] = useState(0)
   const [convPage, setConvPage] = useState(1)
+
+  useEffect(() => { fetchRates().then(r => { setRates(r); setRatesLoaded(true) }) }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -141,20 +167,34 @@ export default function ReportPage() {
     }
   }
 
-  const totalCommission = data.reduce((s, d) => s + d.commissionEarned, 0)
-  const totalClicks = data.reduce((s, d) => s + (d.clicks ?? 0), 0)
+  const totalClicks = useMemo(() => data.reduce((s, d) => s + (d.clicks ?? 0), 0), [data])
+
+  const totalPendingCommission = useMemo(() =>
+    data.reduce((s, d) => s + convertAmount(d.pendingCommission ?? 0, d.currency, displayCurrency, rates), 0),
+    [data, displayCurrency, rates])
+
+  const totalApprovedCommission = useMemo(() =>
+    data.reduce((s, d) => s + convertAmount(d.commissionEarned, d.currency, displayCurrency, rates), 0),
+    [data, displayCurrency, rates])
 
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-gray-900">Report</h1>
-        <button onClick={load} disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">
-          <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <select value={displayCurrency} onChange={e => setDisplayCurrency(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-900 font-medium">
+            {DISPLAY_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          {ratesLoaded && <span className="text-[10px] text-gray-400">Live rates</span>}
+          <button onClick={load} disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+            <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -184,7 +224,7 @@ export default function ReportPage() {
 
       {/* KPI cards */}
       {data.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-xl p-5 border border-gray-200">
             <div className="text-xs text-gray-500 mb-1">Active Offers</div>
             <div className="text-2xl font-bold text-gray-900">{data.length}</div>
@@ -194,12 +234,22 @@ export default function ReportPage() {
             <div className="text-2xl font-bold text-gray-900">{totalClicks.toLocaleString()}</div>
           </div>
           <div className="bg-white rounded-xl p-5 border border-gray-200">
-            <div className="text-xs text-gray-500 mb-1">Approved Conversions</div>
-            <div className="text-2xl font-bold text-gray-900">{data.reduce((s, d) => s + d.approved, 0)}</div>
+            <div className="text-xs text-gray-500 mb-1">Conversions</div>
+            <div className="text-2xl font-bold text-gray-900">{data.reduce((s, d) => s + d.total, 0)}</div>
+            <div className="text-xs text-gray-400 mt-0.5">
+              <span className="text-green-600">{data.reduce((s, d) => s + d.approved, 0)} approved</span>
+              {' · '}
+              <span className="text-yellow-600">{data.reduce((s, d) => s + d.pending, 0)} pending</span>
+            </div>
           </div>
-          <div className="bg-white rounded-xl p-5 border border-gray-200">
-            <div className="text-xs text-gray-500 mb-1">Commission Earned</div>
-            <div className="text-2xl font-bold text-green-600">{fmtMoney(totalCommission)}</div>
+          <div className="bg-white rounded-xl p-5 border border-yellow-200">
+            <div className="text-xs text-yellow-600 mb-1">Pending Commission</div>
+            <div className="text-2xl font-bold text-yellow-600">{fmtMoney(totalPendingCommission, displayCurrency)}</div>
+            <div className="text-xs text-gray-400 mt-0.5">awaiting approval</div>
+          </div>
+          <div className="bg-white rounded-xl p-5 border border-green-200">
+            <div className="text-xs text-green-600 mb-1">Approved Commission</div>
+            <div className="text-2xl font-bold text-green-600">{fmtMoney(totalApprovedCommission, displayCurrency)}</div>
           </div>
         </div>
       )}
@@ -226,7 +276,7 @@ export default function ReportPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>
-              {['Offer ID', 'Offer', 'Clicks', 'Approved', 'Pending', 'Rejected', 'CVR', 'EPC', 'Commission Earned'].map(h => (
+              {['Offer ID', 'Offer', 'Clicks', 'Approved', 'Pending', 'Rejected', 'CVR', 'EPC', 'Commission'].map(h => (
                 <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
               ))}
             </tr>
@@ -253,8 +303,8 @@ export default function ReportPage() {
                   <td className="px-4 py-3 font-medium text-yellow-600">{row.pending}</td>
                   <td className="px-4 py-3 font-medium text-red-500">{row.rejected}</td>
                   <td className="px-4 py-3 text-blue-600 font-medium">{(row.clicks ?? 0) > 0 ? `${row.cvr}%` : '—'}</td>
-                  <td className="px-4 py-3 text-indigo-600 font-medium">{(row.clicks ?? 0) > 0 ? `$${row.epc}` : '—'}</td>
-                  <td className="px-4 py-3 font-semibold text-green-700">{fmtMoney(row.commissionEarned, row.currency)}</td>
+                  <td className="px-4 py-3 text-indigo-600 font-medium">{(row.clicks ?? 0) > 0 ? fmtMoney(row.epc, row.currency) : '—'}</td>
+                  <td className="px-4 py-3 font-semibold text-green-700">{fmtMoney(convertAmount(row.commissionEarned, row.currency, displayCurrency, rates), displayCurrency)}</td>
                 </tr>
                 {expandedOffer === row.offerId && (
                   <tr key={`${row.offerId}-detail`}>
@@ -278,7 +328,7 @@ export default function ReportPage() {
                               <tbody className="divide-y divide-gray-200">
                                 {conversions.map(c => (
                                   <tr key={c.id} className="hover:bg-white">
-                                    <td className="px-3 py-2 font-mono text-gray-600">{c.xid || '—'}</td>
+                                    <td className="px-3 py-2 font-mono text-gray-600 max-w-[200px] truncate" title={c.sourceRefId}>{c.sourceRefId || '—'}</td>
                                     <td className="px-3 py-2">
                                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                                         c.status === 'APPROVED' ? 'bg-green-100 text-green-700' :

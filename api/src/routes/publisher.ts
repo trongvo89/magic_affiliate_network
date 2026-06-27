@@ -256,7 +256,7 @@ export default async function publisherRoutes(server: FastifyInstance) {
       if (!o) continue
       summary[offerId] = {
         offerId, offerName: o.name, mmpSource: o.mmpSource, currency: o.currency,
-        total: 0, approved: 0, pending: 0, rejected: 0, commissionEarned: 0, totalRevenue: 0,
+        total: 0, approved: 0, pending: 0, rejected: 0, commissionEarned: 0, pendingCommission: 0, totalRevenue: 0,
         clicks: clickMap[offerId] ?? 0,
       }
     }
@@ -267,7 +267,7 @@ export default async function publisherRoutes(server: FastifyInstance) {
         if (!o) continue
         summary[row.offerId] = {
           offerId: row.offerId, offerName: o.name, mmpSource: o.mmpSource, currency: o.currency,
-          total: 0, approved: 0, pending: 0, rejected: 0, commissionEarned: 0, totalRevenue: 0,
+          total: 0, approved: 0, pending: 0, rejected: 0, commissionEarned: 0, pendingCommission: 0, totalRevenue: 0,
           clicks: clickMap[row.offerId] ?? 0,
         }
       }
@@ -278,7 +278,10 @@ export default async function publisherRoutes(server: FastifyInstance) {
         s.commissionEarned = parseFloat((row._sum.commissionAmount ?? 0).toFixed(2))
         s.totalRevenue = parseFloat((row._sum.revenue ?? 0).toFixed(2))
       }
-      if (row.status === 'PENDING') s.pending = row._count.id
+      if (row.status === 'PENDING') {
+        s.pending = row._count.id
+        s.pendingCommission = parseFloat((row._sum.commissionAmount ?? 0).toFixed(2))
+      }
       if (row.status === 'REJECTED') s.rejected = row._count.id
     }
 
