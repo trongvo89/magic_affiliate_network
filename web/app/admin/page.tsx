@@ -18,6 +18,7 @@ interface Stats {
   today: PeriodStats
   week: PeriodStats
   month: PeriodStats
+  openCommissionByCurrency: Record<string, number>
   pendingPublishers: number
 }
 
@@ -25,9 +26,9 @@ interface DailyPoint {
   date: string
   clicks: number
   conversions: number
-  commission: number
+  commissionByCurrency: Record<string, number>
   revenue: number
-  [key: string]: string | number
+  [key: string]: any
 }
 
 type Rates = Record<string, number>
@@ -47,6 +48,14 @@ function convertAmount(amount: number, fromCurrency: string, toCurrency: string,
   const fromRate = rates[fromCurrency] || 1
   const toRate = rates[toCurrency] || 1
   return (amount / fromRate) * toRate
+}
+
+function convertByCurrency(byCurrency: Record<string, number>, targetCurrency: string, rates: Rates): number {
+  let total = 0
+  for (const [cur, amt] of Object.entries(byCurrency)) {
+    total += convertAmount(amt, cur, targetCurrency, rates)
+  }
+  return total
 }
 
 function aggregatePeriod(period: PeriodStats, targetCurrency: string, rates: Rates) {
@@ -81,6 +90,12 @@ export default function AdminDashboard() {
 
   const monthAgg = useMemo(() => stats ? aggregatePeriod(stats.month, displayCurrency, rates) : null, [stats, displayCurrency, rates])
   const todayAgg = useMemo(() => stats ? aggregatePeriod(stats.today, displayCurrency, rates) : null, [stats, displayCurrency, rates])
+  const openCommission = useMemo(() => stats ? convertByCurrency(stats.openCommissionByCurrency, displayCurrency, rates) : 0, [stats, displayCurrency, rates])
+
+  const convertedDaily = useMemo(() => daily.map(d => ({
+    ...d,
+    commission: convertByCurrency(d.commissionByCurrency || {}, displayCurrency, rates),
+  })), [daily, displayCurrency, rates])
 
   const totalClicks = daily.reduce((s, d) => s + d.clicks, 0)
 
@@ -99,7 +114,7 @@ export default function AdminDashboard() {
       </div>
 
       {stats && monthAgg && todayAgg && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-xl p-4 border border-gray-200">
             <div className="text-xs text-gray-500 mb-1">Clicks (30d)</div>
             <div className="text-2xl font-bold text-gray-900">{totalClicks.toLocaleString()}</div>
@@ -110,7 +125,11 @@ export default function AdminDashboard() {
             <div className="text-xs text-gray-400 mt-0.5">Today: {todayAgg.conversions}</div>
           </div>
           <div className="bg-white rounded-xl p-4 border border-gray-200">
-            <div className="text-xs text-gray-500 mb-1">Commission (30d)</div>
+            <div className="text-xs text-gray-500 mb-1">Open Commission (30d)</div>
+            <div className="text-2xl font-bold text-orange-600">{fmtMoney(openCommission, displayCurrency)}</div>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-200">
+            <div className="text-xs text-gray-500 mb-1">Approved Commission (30d)</div>
             <div className="text-2xl font-bold text-green-700">{fmtMoney(monthAgg.commission, displayCurrency)}</div>
             <div className="text-xs text-gray-400 mt-0.5">Today: {fmtMoney(todayAgg.commission, displayCurrency)}</div>
           </div>
@@ -124,15 +143,15 @@ export default function AdminDashboard() {
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
         <h2 className="text-sm font-semibold text-gray-700 mb-4">Clicks & Conversions (30 days)</h2>
-        <PerformanceChart data={daily} lines={[
+        <PerformanceChart data={convertedDaily} lines={[
           { key: 'clicks', color: '#3b82f6', label: 'Clicks' },
           { key: 'conversions', color: '#f97316', label: 'Conversions' },
         ]} />
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Daily Commission (30 days)</h2>
-        <CommissionChart data={daily} dataKey="commission" label="Commission" color="#22c55e" />
+        <h2 className="text-sm font-semibold text-gray-700 mb-4">Daily Commission (30 days) — {displayCurrency}</h2>
+        <CommissionChart data={convertedDaily} dataKey="commission" label="Commission" color="#22c55e" />
       </div>
     </div>
   )

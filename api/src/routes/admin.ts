@@ -29,10 +29,11 @@ export default async function adminRoutes(server: FastifyInstance) {
     const start7d = new Date(now.getTime() - 7 * 86400000)
     const start30d = new Date(now.getTime() - 30 * 86400000)
 
-    const [todayByCur, weekByCur, monthByCur, pendingPubs] = await Promise.all([
+    const [todayByCur, weekByCur, monthByCur, monthOpenByCur, pendingPubs] = await Promise.all([
       prisma.conversion.groupBy({ by: ['currency'], where: { receivedAt: { gte: startOfDay } }, _sum: { revenue: true, commissionAmount: true }, _count: { _all: true } }),
       prisma.conversion.groupBy({ by: ['currency'], where: { receivedAt: { gte: start7d } }, _sum: { revenue: true, commissionAmount: true }, _count: { _all: true } }),
-      prisma.conversion.groupBy({ by: ['currency'], where: { receivedAt: { gte: start30d } }, _sum: { revenue: true, commissionAmount: true }, _count: { _all: true } }),
+      prisma.conversion.groupBy({ by: ['currency'], where: { receivedAt: { gte: start30d }, status: 'APPROVED' }, _sum: { revenue: true, commissionAmount: true }, _count: { _all: true } }),
+      prisma.conversion.groupBy({ by: ['currency'], where: { receivedAt: { gte: start30d } }, _sum: { commissionAmount: true }, _count: { _all: true } }),
       prisma.user.count({ where: { status: 'PENDING', role: 'PUBLISHER' } }),
     ])
 
@@ -51,10 +52,20 @@ export default async function adminRoutes(server: FastifyInstance) {
       return { conversions: totalConversions, byCurrency }
     }
 
+    function buildOpenCommission(rows: any[]) {
+      const byCurrency: Record<string, number> = {}
+      for (const row of rows) {
+        const cur = row.currency || 'USD'
+        byCurrency[cur] = (byCurrency[cur] || 0) + (row._sum.commissionAmount ?? 0)
+      }
+      return byCurrency
+    }
+
     return {
       today: buildStats(todayByCur),
       week: buildStats(weekByCur),
       month: buildStats(monthByCur),
+      openCommissionByCurrency: buildOpenCommission(monthOpenByCur),
       pendingPublishers: pendingPubs,
     }
   })
@@ -65,11 +76,11 @@ export default async function adminRoutes(server: FastifyInstance) {
     const since = new Date(Date.now() - days * 86400000)
 
     const [convRows, clickRows, activePubs] = await Promise.all([
-      prisma.$queryRaw<Array<{ d: string; cnt: bigint; rev: number; comm: number }>>`
-        SELECT DATE("eventAt") as d, COUNT(*)::int as cnt,
+      prisma.$queryRaw<Array<{ d: string; cur: string; cnt: bigint; rev: number; comm: number }>>`
+        SELECT DATE("eventAt") as d, "currency" as cur, COUNT(*)::int as cnt,
                COALESCE(SUM("revenue"),0) as rev, COALESCE(SUM("commissionAmount"),0) as comm
         FROM "Conversion" WHERE "eventAt" >= ${since}
-        GROUP BY DATE("eventAt") ORDER BY d`,
+        GROUP BY DATE("eventAt"), "currency" ORDER BY d`,
       prisma.$queryRaw<Array<{ d: string; cnt: bigint }>>`
         SELECT DATE("clickedAt") as d, COUNT(*)::int as cnt
         FROM "Click" WHERE "clickedAt" >= ${since}
@@ -77,15 +88,20 @@ export default async function adminRoutes(server: FastifyInstance) {
       prisma.user.count({ where: { role: 'PUBLISHER', status: 'ACTIVE' } }),
     ])
 
-    const map = new Map<string, { date: string; clicks: number; conversions: number; commission: number; revenue: number }>()
+    const map = new Map<string, { date: string; clicks: number; conversions: number; commissionByCurrency: Record<string, number>; revenue: number }>()
     for (let i = 0; i < days; i++) {
       const d = new Date(Date.now() - (days - 1 - i) * 86400000).toISOString().slice(0, 10)
-      map.set(d, { date: d, clicks: 0, conversions: 0, commission: 0, revenue: 0 })
+      map.set(d, { date: d, clicks: 0, conversions: 0, commissionByCurrency: {}, revenue: 0 })
     }
     for (const r of convRows) {
       const key = new Date(r.d).toISOString().slice(0, 10)
       const entry = map.get(key)
-      if (entry) { entry.conversions = Number(r.cnt); entry.commission = Number(r.comm); entry.revenue = Number(r.rev) }
+      if (entry) {
+        entry.conversions += Number(r.cnt)
+        entry.revenue += Number(r.rev)
+        const cur = r.cur || 'USD'
+        entry.commissionByCurrency[cur] = (entry.commissionByCurrency[cur] || 0) + Number(r.comm)
+      }
     }
     for (const r of clickRows) {
       const key = new Date(r.d).toISOString().slice(0, 10)

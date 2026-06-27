@@ -24,8 +24,8 @@ interface DailyPoint {
   date: string
   clicks: number
   conversions: number
-  commission: number
-  [key: string]: string | number
+  commissionByCurrency: Record<string, number>
+  [key: string]: any
 }
 
 type Rates = Record<string, number>
@@ -40,7 +40,7 @@ async function fetchRates(): Promise<Rates> {
   return { USD: 1, VND: 25000, RUB: 90 }
 }
 
-function aggregateByCurrency(byCurrency: Record<string, number>, targetCurrency: string, rates: Rates): number {
+function convertByCurrency(byCurrency: Record<string, number>, targetCurrency: string, rates: Rates): number {
   let total = 0
   for (const [cur, amt] of Object.entries(byCurrency)) {
     const fromRate = rates[cur] || 1
@@ -83,13 +83,18 @@ export default function DashboardPage() {
   useEffect(() => { load() }, [load])
   useEffect(() => { fetchRates().then(r => { setRates(r); setRatesLoaded(true) }) }, [])
 
-  const rangeEarned = useMemo(() =>
-    stats ? aggregateByCurrency(stats.range.approvedEarnedByCurrency, displayCurrency, rates) : 0,
+  const openCommission = useMemo(() =>
+    stats ? convertByCurrency(stats.range.earnedByCurrency, displayCurrency, rates) : 0,
     [stats, displayCurrency, rates])
 
   const totalApproved = useMemo(() =>
-    stats ? aggregateByCurrency(stats.totalApprovedByCurrency, displayCurrency, rates) : 0,
+    stats ? convertByCurrency(stats.totalApprovedByCurrency, displayCurrency, rates) : 0,
     [stats, displayCurrency, rates])
+
+  const convertedDaily = useMemo(() => daily.map(d => ({
+    ...d,
+    commission: convertByCurrency(d.commissionByCurrency || {}, displayCurrency, rates),
+  })), [daily, displayCurrency, rates])
 
   return (
     <div className="p-6">
@@ -140,9 +145,9 @@ export default function DashboardPage() {
             <div className="text-xs text-gray-400 mt-0.5">CVR: {stats.cvr > 0 ? `${stats.cvr}%` : '—'}</div>
           </div>
           <div className="bg-white rounded-xl p-5 border border-gray-200">
-            <div className="text-xs text-gray-500 mb-1">Earned (range)</div>
-            <div className="text-2xl font-bold text-green-600">{fmtMoney(rangeEarned, displayCurrency)}</div>
-            <div className="text-xs text-gray-400 mt-0.5">{stats.range.approvedConversions} approved</div>
+            <div className="text-xs text-gray-500 mb-1">Open Commission</div>
+            <div className="text-2xl font-bold text-orange-600">{fmtMoney(openCommission, displayCurrency)}</div>
+            <div className="text-xs text-gray-400 mt-0.5">{stats.range.conversions} conversions</div>
           </div>
           <div className="bg-white rounded-xl p-5 border border-gray-200">
             <div className="text-xs text-gray-500 mb-1">Total Approved</div>
@@ -155,7 +160,7 @@ export default function DashboardPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
         <h2 className="text-sm font-semibold text-gray-700 mb-4">Clicks & Conversions</h2>
         {daily.length > 0 ? (
-          <PerformanceChart data={daily} lines={[
+          <PerformanceChart data={convertedDaily} lines={[
             { key: 'clicks', color: '#3b82f6', label: 'Clicks' },
             { key: 'conversions', color: '#f97316', label: 'Conversions' },
           ]} />
@@ -167,9 +172,9 @@ export default function DashboardPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Daily Commission</h2>
+        <h2 className="text-sm font-semibold text-gray-700 mb-4">Daily Commission — {displayCurrency}</h2>
         {daily.length > 0 ? (
-          <CommissionChart data={daily} dataKey="commission" label="Commission" color="#22c55e" />
+          <CommissionChart data={convertedDaily} dataKey="commission" label="Commission" color="#22c55e" />
         ) : (
           <div className="h-[220px] flex items-center justify-center text-gray-400 text-sm">
             {loading ? 'Loading...' : 'No data for selected period'}
