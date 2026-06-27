@@ -185,7 +185,7 @@ export default async function postbackRoutes(server: FastifyInstance) {
     const revenue = orderTotal
     const networkCommission = payout > 0 ? payout : (openCommission * exchangeRate)
     const rawCurrency = query.payout_currency || query.order_total_currency || null
-    const conversionTime = query.conversion_time || ''
+    const conversionTime = query.conversion_time || query.click_time || ''
     const eventAt = conversionTime
       ? (/^\d+$/.test(conversionTime) ? new Date(Number(conversionTime) * 1000) : new Date(conversionTime))
       : new Date()
