@@ -323,7 +323,7 @@ export default function ReportPage() {
                             <table className="w-full text-xs">
                               <thead className="text-gray-400 uppercase">
                                 <tr>
-                                  {['XID', 'Status', 'Order Value', 'Commission', 'Currency', 'Date'].map(h => (
+                                  {['XID', 'Status', 'Order Value', 'Pending Comm', 'Approved Comm', 'Currency', 'Date'].map(h => (
                                     <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
                                   ))}
                                 </tr>
@@ -340,7 +340,8 @@ export default function ReportPage() {
                                       }`}>{c.status}</span>
                                     </td>
                                     <td className="px-3 py-2 text-gray-700">{fmtMoney(c.revenue, c.currency)}</td>
-                                    <td className="px-3 py-2 font-semibold text-green-700">{fmtMoney(c.commissionAmount, c.currency)}</td>
+                                    <td className="px-3 py-2 font-semibold text-yellow-600">{fmtMoney(c.status !== 'APPROVED' ? c.commissionAmount : 0, c.currency)}</td>
+                                    <td className="px-3 py-2 font-semibold text-green-600">{fmtMoney(c.status === 'APPROVED' ? c.commissionAmount : 0, c.currency)}</td>
                                     <td className="px-3 py-2 text-gray-500">{c.currency}</td>
                                     <td className="px-3 py-2 text-gray-500">{fmtDate(c.eventAt)}</td>
                                   </tr>
@@ -348,14 +349,16 @@ export default function ReportPage() {
                               </tbody>
                               {conversions.length > 0 && (() => {
                                 const totalRev = conversions.reduce((s, c) => s + c.revenue, 0)
-                                const totalComm = conversions.reduce((s, c) => s + c.commissionAmount, 0)
+                                const totalPending = conversions.reduce((s, c) => s + (c.status !== 'APPROVED' ? c.commissionAmount : 0), 0)
+                                const totalApproved = conversions.reduce((s, c) => s + (c.status === 'APPROVED' ? c.commissionAmount : 0), 0)
                                 const cur = conversions[0]?.currency || 'VND'
                                 return (
                                   <tfoot className="bg-gray-100 font-semibold text-xs border-t-2 border-gray-300">
                                     <tr>
                                       <td colSpan={2} className="px-3 py-2 text-gray-900">Total</td>
                                       <td className="px-3 py-2 text-gray-900">{fmtMoney(totalRev, cur)}</td>
-                                      <td className="px-3 py-2 text-green-700">{fmtMoney(totalComm, cur)}</td>
+                                      <td className="px-3 py-2 text-yellow-600">{fmtMoney(totalPending, cur)}</td>
+                                      <td className="px-3 py-2 text-green-600">{fmtMoney(totalApproved, cur)}</td>
                                       <td colSpan={2} className="px-3 py-2"></td>
                                     </tr>
                                   </tfoot>
