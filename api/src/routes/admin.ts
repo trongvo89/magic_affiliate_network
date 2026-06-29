@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyRequest } from 'fastify'
-import { PrismaClient } from '@prisma/client'
+import { Prisma, PrismaClient } from '@prisma/client'
 import { auditLog, diffChanges } from '../lib/audit'
 
 const offerSelect = {
@@ -35,17 +35,19 @@ export default async function adminRoutes(server: FastifyInstance) {
   server.addHook('preHandler', requireAdmin)
 
   // Stats
-  server.get('/stats', async () => {
+  server.get<{ Querystring: { from?: string; to?: string; offerId?: string } }>('/stats', async (request) => {
+    const { from, to, offerId } = request.query
     const now = new Date()
     const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0)
-    const start7d = new Date(now.getTime() - 7 * 86400000)
-    const start30d = new Date(now.getTime() - 30 * 86400000)
+    const rangeStart = from ? new Date(from) : new Date(now.getTime() - 30 * 86400000)
+    const rangeEnd = to ? new Date(new Date(to).getTime() + 86400000) : now
+    const offerFilter = offerId ? { offerId } : {}
 
-    const [todayByCur, weekByCur, monthByCur, monthOpenByCur, pendingPubs] = await Promise.all([
-      prisma.conversion.groupBy({ by: ['currency'], where: { receivedAt: { gte: startOfDay } }, _sum: { revenue: true, commissionAmount: true }, _count: { _all: true } }),
-      prisma.conversion.groupBy({ by: ['currency'], where: { receivedAt: { gte: start7d } }, _sum: { revenue: true, commissionAmount: true }, _count: { _all: true } }),
-      prisma.conversion.groupBy({ by: ['currency'], where: { receivedAt: { gte: start30d }, status: 'APPROVED' }, _sum: { revenue: true, commissionAmount: true }, _count: { _all: true } }),
-      prisma.conversion.groupBy({ by: ['currency'], where: { receivedAt: { gte: start30d } }, _sum: { commissionAmount: true }, _count: { _all: true } }),
+    const [todayByCur, periodByCur, periodApprovedByCur, periodOpenByCur, pendingPubs] = await Promise.all([
+      prisma.conversion.groupBy({ by: ['currency'], where: { receivedAt: { gte: startOfDay, lte: rangeEnd }, ...offerFilter }, _sum: { revenue: true, commissionAmount: true }, _count: { _all: true } }),
+      prisma.conversion.groupBy({ by: ['currency'], where: { receivedAt: { gte: rangeStart, lte: rangeEnd }, ...offerFilter }, _sum: { revenue: true, commissionAmount: true }, _count: { _all: true } }),
+      prisma.conversion.groupBy({ by: ['currency'], where: { receivedAt: { gte: rangeStart, lte: rangeEnd }, status: 'APPROVED', ...offerFilter }, _sum: { revenue: true, commissionAmount: true }, _count: { _all: true } }),
+      prisma.conversion.groupBy({ by: ['currency'], where: { receivedAt: { gte: rangeStart, lte: rangeEnd }, ...offerFilter }, _sum: { commissionAmount: true }, _count: { _all: true } }),
       prisma.user.count({ where: { status: 'PENDING', role: 'PUBLISHER' } }),
     ])
 
@@ -75,34 +77,38 @@ export default async function adminRoutes(server: FastifyInstance) {
 
     return {
       today: buildStats(todayByCur),
-      week: buildStats(weekByCur),
-      month: buildStats(monthByCur),
-      openCommissionByCurrency: buildOpenCommission(monthOpenByCur),
+      week: buildStats(periodByCur),
+      month: buildStats(periodApprovedByCur),
+      openCommissionByCurrency: buildOpenCommission(periodOpenByCur),
       pendingPublishers: pendingPubs,
     }
   })
 
   // Daily time-series for charts
-  server.get<{ Querystring: { days?: string } }>('/stats/daily', async (request) => {
-    const days = Math.min(parseInt(request.query.days || '30'), 90)
-    const since = new Date(Date.now() - days * 86400000)
+  server.get<{ Querystring: { days?: string; from?: string; to?: string; offerId?: string } }>('/stats/daily', async (request) => {
+    const { from, to, offerId } = request.query
+    const now = new Date()
+    const since = from ? new Date(from) : new Date(Date.now() - Math.min(parseInt(request.query.days || '30'), 90) * 86400000)
+    const until = to ? new Date(new Date(to).getTime() + 86400000) : now
+    const offerCondition = offerId ? Prisma.sql` AND "offerId" = ${offerId}` : Prisma.empty
 
     const [convRows, clickRows, activePubs] = await Promise.all([
       prisma.$queryRaw<Array<{ d: string; cur: string; cnt: bigint; rev: number; comm: number }>>`
         SELECT DATE("eventAt") as d, "currency" as cur, COUNT(*)::int as cnt,
                COALESCE(SUM("revenue"),0) as rev, COALESCE(SUM("commissionAmount"),0) as comm
-        FROM "Conversion" WHERE "eventAt" >= ${since}
+        FROM "Conversion" WHERE "eventAt" >= ${since} AND "eventAt" <= ${until}${offerCondition}
         GROUP BY DATE("eventAt"), "currency" ORDER BY d`,
       prisma.$queryRaw<Array<{ d: string; cnt: bigint }>>`
         SELECT DATE("clickedAt") as d, COUNT(*)::int as cnt
-        FROM "Click" WHERE "clickedAt" >= ${since}
+        FROM "Click" WHERE "clickedAt" >= ${since} AND "clickedAt" <= ${until}${offerCondition}
         GROUP BY DATE("clickedAt") ORDER BY d`,
       prisma.user.count({ where: { role: 'PUBLISHER', status: 'ACTIVE' } }),
     ])
 
+    const days = Math.ceil((until.getTime() - since.getTime()) / 86400000)
     const map = new Map<string, { date: string; clicks: number; conversions: number; commissionByCurrency: Record<string, number>; revenue: number }>()
     for (let i = 0; i < days; i++) {
-      const d = new Date(Date.now() - (days - 1 - i) * 86400000).toISOString().slice(0, 10)
+      const d = new Date(since.getTime() + i * 86400000).toISOString().slice(0, 10)
       map.set(d, { date: d, clicks: 0, conversions: 0, commissionByCurrency: {}, revenue: 0 })
     }
     for (const r of convRows) {

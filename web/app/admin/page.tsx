@@ -75,18 +75,33 @@ export default function AdminDashboard() {
   const [displayCurrency, setDisplayCurrency] = useState('VND')
   const [rates, setRates] = useState<Rates>({ USD: 1 })
   const [ratesLoaded, setRatesLoaded] = useState(false)
+  const defaultFrom = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+  const defaultTo = new Date().toISOString().slice(0, 10)
+  const [dateFrom, setDateFrom] = useState(defaultFrom)
+  const [dateTo, setDateTo] = useState(defaultTo)
+  const [selectedOffer, setSelectedOffer] = useState('')
+  const [offers, setOffers] = useState<Array<{ offerId: string; offerName: string }>>([])
 
   useEffect(() => {
+    api.get('/admin/offers-summary').then(r => setOffers(r.data || []))
+    fetchRates().then(r => { setRates(r); setRatesLoaded(true) })
+  }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (dateFrom) params.set('from', dateFrom)
+    if (dateTo) params.set('to', dateTo)
+    if (selectedOffer) params.set('offerId', selectedOffer)
+    const qs = params.toString() ? `?${params.toString()}` : ''
     Promise.all([
-      api.get('/admin/stats'),
-      api.get('/admin/stats/daily?days=30'),
+      api.get(`/admin/stats${qs}`),
+      api.get(`/admin/stats/daily${qs}`),
     ]).then(([s, d]) => {
       setStats(s.data)
       setDaily(d.data.daily)
       setActivePublishers(d.data.activePublishers)
     })
-    fetchRates().then(r => { setRates(r); setRatesLoaded(true) })
-  }, [])
+  }, [dateFrom, dateTo, selectedOffer])
 
   const monthAgg = useMemo(() => stats ? aggregatePeriod(stats.month, displayCurrency, rates) : null, [stats, displayCurrency, rates])
   const todayAgg = useMemo(() => stats ? aggregatePeriod(stats.today, displayCurrency, rates) : null, [stats, displayCurrency, rates])
@@ -113,23 +128,44 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3 mb-6 bg-white rounded-xl border border-gray-200 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">From:</span>
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 bg-white text-gray-900" />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">To:</span>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 bg-white text-gray-900" />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">Offer:</span>
+          <select value={selectedOffer} onChange={e => setSelectedOffer(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-900 max-w-[200px]">
+            <option value="">All Offers</option>
+            {offers.map(o => <option key={o.offerId} value={o.offerId}>{o.offerName}</option>)}
+          </select>
+        </div>
+      </div>
+
       {stats && monthAgg && todayAgg && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-xl p-4 border border-gray-200">
-            <div className="text-xs text-gray-500 mb-1">Clicks (30d)</div>
+            <div className="text-xs text-gray-500 mb-1">Clicks</div>
             <div className="text-2xl font-bold text-gray-900">{totalClicks.toLocaleString()}</div>
           </div>
           <div className="bg-white rounded-xl p-4 border border-gray-200">
-            <div className="text-xs text-gray-500 mb-1">Conversions (30d)</div>
+            <div className="text-xs text-gray-500 mb-1">Conversions</div>
             <div className="text-2xl font-bold text-gray-900">{monthAgg.conversions.toLocaleString()}</div>
             <div className="text-xs text-gray-400 mt-0.5">Today: {todayAgg.conversions}</div>
           </div>
           <div className="bg-white rounded-xl p-4 border border-gray-200">
-            <div className="text-xs text-gray-500 mb-1">Open Commission (30d)</div>
+            <div className="text-xs text-gray-500 mb-1">Open Commission</div>
             <div className="text-2xl font-bold text-orange-600">{fmtMoney(openCommission, displayCurrency)}</div>
           </div>
           <div className="bg-white rounded-xl p-4 border border-gray-200">
-            <div className="text-xs text-gray-500 mb-1">Approved Commission (30d)</div>
+            <div className="text-xs text-gray-500 mb-1">Approved Commission</div>
             <div className="text-2xl font-bold text-green-700">{fmtMoney(monthAgg.commission, displayCurrency)}</div>
             <div className="text-xs text-gray-400 mt-0.5">Today: {fmtMoney(todayAgg.commission, displayCurrency)}</div>
           </div>
@@ -142,7 +178,7 @@ export default function AdminDashboard() {
       )}
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Clicks & Conversions (30 days)</h2>
+        <h2 className="text-sm font-semibold text-gray-700 mb-4">Clicks & Conversions</h2>
         <PerformanceChart data={convertedDaily} lines={[
           { key: 'clicks', color: '#3b82f6', label: 'Clicks' },
           { key: 'conversions', color: '#f97316', label: 'Conversions' },
@@ -150,7 +186,7 @@ export default function AdminDashboard() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Daily Commission (30 days) — {displayCurrency}</h2>
+        <h2 className="text-sm font-semibold text-gray-700 mb-4">Daily Commission — {displayCurrency}</h2>
         <CommissionChart data={convertedDaily} dataKey="commission" label="Commission" color="#22c55e" />
       </div>
     </div>
