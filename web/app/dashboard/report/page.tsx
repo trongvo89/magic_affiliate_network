@@ -390,30 +390,6 @@ export default function ReportPage() {
               <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
             )}
           </tbody>
-          {data.length > 0 && (() => {
-            const totals = data.reduce((acc, row) => {
-              acc.clicks += row.clicks ?? 0
-              acc.approved += row.approved
-              acc.pending += row.pending
-              acc.rejected += row.rejected
-              acc.commission += convertAmount(row.commissionEarned, row.currency, displayCurrency, rates)
-              return acc
-            }, { clicks: 0, approved: 0, pending: 0, rejected: 0, commission: 0 })
-            return (
-              <tfoot className="bg-gray-100 font-semibold text-sm border-t-2 border-gray-300">
-                <tr>
-                  <td colSpan={2} className="px-4 py-3 text-gray-900">Total</td>
-                  <td className="px-4 py-3 text-gray-900">{totals.clicks}</td>
-                  <td className="px-4 py-3 text-green-700">{totals.approved}</td>
-                  <td className="px-4 py-3 text-yellow-600">{totals.pending}</td>
-                  <td className="px-4 py-3 text-red-500">{totals.rejected}</td>
-                  <td className="px-4 py-3 text-gray-400">—</td>
-                  <td className="px-4 py-3 text-gray-400">—</td>
-                  <td className="px-4 py-3 text-green-700">{fmtMoney(totals.commission, displayCurrency)}</td>
-                </tr>
-              </tfoot>
-            )
-          })()}
         </table>
       </div>
     </div>
