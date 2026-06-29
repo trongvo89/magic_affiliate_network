@@ -469,6 +469,31 @@ export default function ConversionsPage() {
                 <tr><td colSpan={12} className="px-4 py-8 text-center text-gray-400">No conversions found</td></tr>
               )}
             </tbody>
+            {conversions.length > 0 && (() => {
+              const totals = conversions.reduce((acc, c) => {
+                const adv = getAdvCommission(c, exchangeRate)
+                acc.revenue += c.revenue
+                acc.advComm += adv
+                acc.pubComm += c.commissionAmount
+                acc.magic += adv - c.commissionAmount
+                return acc
+              }, { revenue: 0, advComm: 0, pubComm: 0, magic: 0 })
+              const cur = conversions[0]?.currency || 'VND'
+              return (
+                <tfoot className="bg-gray-100 font-semibold text-sm border-t-2 border-gray-300">
+                  <tr>
+                    <td colSpan={5} className="px-4 py-3 text-gray-900">Total</td>
+                    <td className="px-4 py-3 text-gray-900">{fmtMoney(totals.revenue, cur)}</td>
+                    <td className="px-4 py-3 text-blue-700">{fmtMoney(totals.advComm, cur)}</td>
+                    <td className="px-4 py-3 text-orange-600">{fmtMoney(totals.pubComm, cur)}</td>
+                    <td className="px-4 py-3">
+                      <span className={totals.magic >= 0 ? 'text-green-700' : 'text-red-600'}>{fmtMoney(totals.magic, cur)}</span>
+                    </td>
+                    <td colSpan={3} className="px-4 py-3"></td>
+                  </tr>
+                </tfoot>
+              )
+            })()}
           </table>
         </div>
 
