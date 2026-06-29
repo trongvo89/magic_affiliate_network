@@ -346,6 +346,21 @@ export default function ReportPage() {
                                   </tr>
                                 ))}
                               </tbody>
+                              {conversions.length > 0 && (() => {
+                                const totalRev = conversions.reduce((s, c) => s + c.revenue, 0)
+                                const totalComm = conversions.reduce((s, c) => s + c.commissionAmount, 0)
+                                const cur = conversions[0]?.currency || 'VND'
+                                return (
+                                  <tfoot className="bg-gray-100 font-semibold text-xs border-t-2 border-gray-300">
+                                    <tr>
+                                      <td colSpan={2} className="px-3 py-2 text-gray-900">Total</td>
+                                      <td className="px-3 py-2 text-gray-900">{fmtMoney(totalRev, cur)}</td>
+                                      <td className="px-3 py-2 text-green-700">{fmtMoney(totalComm, cur)}</td>
+                                      <td colSpan={2} className="px-3 py-2"></td>
+                                    </tr>
+                                  </tfoot>
+                                )
+                              })()}
                             </table>
                             {convTotal > 10 && (
                               <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
