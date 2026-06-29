@@ -149,7 +149,11 @@ export default async function publisherRoutes(server: FastifyInstance) {
         skip,
         take: parseInt(limit),
         orderBy: { eventAt: 'desc' },
-        include: { offer: { select: { name: true, mmpSource: true } } },
+        select: {
+          id: true, sourceType: true, sourceRefId: true, offerId: true, publisherId: true,
+          eventType: true, revenue: true, commissionAmount: true, currency: true, status: true, eventAt: true,
+          offer: { select: { name: true, mmpSource: true } },
+        },
       }),
       prisma.conversion.count({ where }),
     ])
@@ -174,7 +178,11 @@ export default async function publisherRoutes(server: FastifyInstance) {
       const convs = await prisma.conversion.findMany({
         where,
         orderBy: [{ offerId: 'asc' }, { status: 'asc' }, { eventAt: 'desc' }],
-        include: { offer: { select: { name: true } } },
+        select: {
+          id: true, sourceRefId: true, offerId: true, eventType: true,
+          revenue: true, commissionAmount: true, currency: true, status: true, eventAt: true,
+          offer: { select: { name: true } },
+        },
       })
 
       const esc = (v: any): string => {

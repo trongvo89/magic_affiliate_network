@@ -11,7 +11,6 @@ interface Conversion {
   publisher?: { name: string; email: string } | null
   eventType: string
   revenue: number
-  advCommission: number
   commissionAmount: number
   currency: string
   status: string
@@ -22,6 +21,15 @@ interface Conversion {
 
 interface Offer { id: string; name: string; commissionType: string }
 interface Publisher { id: string; name: string; email: string }
+
+function getAdvCommission(c: Conversion, exchangeRate: number): number {
+  if (c.sourceType === 'CITYADS') {
+    const raw = c.rawPayload || {}
+    const openComm = parseFloat(raw.open_commission || '0') || 0
+    return openComm * exchangeRate
+  }
+  return c.revenue
+}
 
 const BLANK_FORM = { publisherId: '', offerId: '', eventType: 'purchase', revenue: '', eventAt: '', sourceRefId: '', status: 'PENDING' }
 
@@ -35,6 +43,7 @@ export default function ConversionsPage() {
   const [selected, setSelected] = useState<Conversion | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [exchangeRate, setExchangeRate] = useState(1)
 
   // Edit conversion modal
   const [editing, setEditing] = useState<Conversion | null>(null)
@@ -89,6 +98,7 @@ export default function ConversionsPage() {
     const { data } = await api.get(`/admin/conversions?${params}`)
     setConversions(data.conversions)
     setTotal(data.total)
+    if (data.cityadsExchangeRate) setExchangeRate(data.cityadsExchangeRate)
   }
 
   useEffect(() => { load() }, [page, filters])
@@ -420,11 +430,11 @@ export default function ConversionsPage() {
                   <td className="px-4 py-2.5 text-gray-600 cursor-pointer" onClick={() => setSelected(c)}>{c.publisher?.name || '—'}</td>
                   <td className="px-4 py-2.5 text-gray-600 capitalize cursor-pointer" onClick={() => setSelected(c)}>{c.eventType}</td>
                   <td className="px-4 py-2.5 text-gray-900 cursor-pointer" onClick={() => setSelected(c)}>{fmtMoney(c.revenue, c.currency)}</td>
-                  <td className="px-4 py-2.5 text-blue-700 font-medium cursor-pointer" onClick={() => setSelected(c)}>{fmtMoney(c.advCommission, c.currency)}</td>
+                  <td className="px-4 py-2.5 text-blue-700 font-medium cursor-pointer" onClick={() => setSelected(c)}>{fmtMoney(getAdvCommission(c, exchangeRate), c.currency)}</td>
                   <td className="px-4 py-2.5 text-orange-600 font-medium cursor-pointer" onClick={() => setSelected(c)}>{fmtMoney(c.commissionAmount, c.currency)}</td>
                   <td className="px-4 py-2.5 font-medium cursor-pointer" onClick={() => setSelected(c)}>
-                    <span className={(c.advCommission - c.commissionAmount) >= 0 ? 'text-green-700' : 'text-red-600'}>
-                      {fmtMoney(c.advCommission - c.commissionAmount, c.currency)}
+                    <span className={(getAdvCommission(c, exchangeRate) - c.commissionAmount) >= 0 ? 'text-green-700' : 'text-red-600'}>
+                      {fmtMoney(getAdvCommission(c, exchangeRate) - c.commissionAmount, c.currency)}
                     </span>
                   </td>
                   <td className="px-4 py-2.5 cursor-pointer" onClick={() => setSelected(c)}>{statusBadge(c.status)}</td>
