@@ -133,7 +133,10 @@ export default async function adminRoutes(server: FastifyInstance) {
 
     const conversions = await prisma.conversion.findMany({
       where: { sourceType: 'CITYADS' },
-      include: { offer: { select: { commissionType: true, commissionValue: true } } },
+      select: {
+        id: true, revenue: true, commissionAmount: true, rawPayload: true,
+        offer: { select: { commissionType: true, commissionValue: true } },
+      },
     })
 
     const results: { id: string; before: { revenue: number; commission: number }; after: { revenue: number; commission: number } }[] = []
@@ -243,12 +246,19 @@ export default async function adminRoutes(server: FastifyInstance) {
           skip,
           take: parseInt(limit),
           orderBy: { eventAt: 'desc' },
-          include: { offer: { select: { name: true, mmpSource: true } }, publisher: { select: { name: true, email: true } } },
+          select: {
+            id: true, sourceType: true, sourceRefId: true, offerId: true, publisherId: true,
+            eventType: true, revenue: true, commissionAmount: true, currency: true, status: true,
+            rawPayload: true, postbackSent: true, postbackStatus: true, receivedAt: true, eventAt: true,
+            offer: { select: { name: true, mmpSource: true } },
+            publisher: { select: { name: true, email: true } },
+          },
         }),
         prisma.conversion.count({ where }),
       ])
 
-      return { conversions, total, page: parseInt(page), limit: parseInt(limit) }
+      const cityadsExchangeRate = parseFloat(process.env.CITYADS_EXCHANGE_RATE || '1')
+      return { conversions, total, page: parseInt(page), limit: parseInt(limit), cityadsExchangeRate }
     }
   )
 
@@ -270,7 +280,11 @@ export default async function adminRoutes(server: FastifyInstance) {
       const convs = await prisma.conversion.findMany({
         where,
         orderBy: [{ offerId: 'asc' }, { status: 'asc' }, { eventAt: 'desc' }],
-        include: { offer: { select: { name: true } }, publisher: { select: { name: true, email: true } } },
+        select: {
+          id: true, sourceType: true, sourceRefId: true, offerId: true, publisherId: true,
+          eventType: true, revenue: true, commissionAmount: true, currency: true, status: true, eventAt: true,
+          offer: { select: { name: true } }, publisher: { select: { name: true, email: true } },
+        },
       })
 
       const esc = (v: any): string => {
@@ -628,7 +642,13 @@ export default async function adminRoutes(server: FastifyInstance) {
           rawPayload: { manual: true },
           eventAt: new Date(eventAt),
         },
-        include: { offer: { select: { name: true, mmpSource: true } }, publisher: { select: { name: true, email: true } } },
+        select: {
+          id: true, sourceType: true, sourceRefId: true, offerId: true, publisherId: true,
+          eventType: true, revenue: true, commissionAmount: true, currency: true, status: true,
+          rawPayload: true, postbackSent: true, postbackStatus: true, receivedAt: true, eventAt: true,
+          offer: { select: { name: true, mmpSource: true } },
+          publisher: { select: { name: true, email: true } },
+        },
       })
       return reply.code(201).send(conversion)
     }
@@ -666,13 +686,18 @@ export default async function adminRoutes(server: FastifyInstance) {
         return reply.code(400).send({ error: 'No fields to update' })
       }
 
-      const before = await prisma.conversion.findUnique({ where: { id } })
+      const convSelect = {
+        id: true, sourceType: true, sourceRefId: true, offerId: true, publisherId: true,
+        eventType: true, revenue: true, commissionAmount: true, currency: true, status: true,
+        rawPayload: true, postbackSent: true, postbackStatus: true, receivedAt: true, eventAt: true,
+      }
+      const before = await prisma.conversion.findUnique({ where: { id }, select: convSelect })
       if (!before) return reply.code(404).send({ error: 'Conversion not found' })
 
       const conversion = await prisma.conversion.update({
         where: { id },
         data: updateData,
-        include: { offer: { select: { name: true, mmpSource: true } }, publisher: { select: { name: true, email: true } } },
+        select: { ...convSelect, offer: { select: { name: true, mmpSource: true } }, publisher: { select: { name: true, email: true } } },
       })
 
       const changes = diffChanges(before, conversion)
@@ -711,7 +736,7 @@ export default async function adminRoutes(server: FastifyInstance) {
 
           const where = row.id ? { id: row.id } : { sourceType_sourceRefId: undefined as any }
           if (row.sourceRefId && !row.id) {
-            const existing = await prisma.conversion.findFirst({ where: { sourceRefId: row.sourceRefId } })
+            const existing = await prisma.conversion.findFirst({ where: { sourceRefId: row.sourceRefId }, select: { id: true } })
             if (!existing) throw new Error(`source_ref_id "${row.sourceRefId}" not found`)
             await prisma.conversion.update({ where: { id: existing.id }, data: { status: row.status as any } })
           } else {
@@ -777,6 +802,7 @@ export default async function adminRoutes(server: FastifyInstance) {
               rawPayload: { manual: true, bulk: true },
               eventAt: eventDate,
             },
+            select: { id: true },
           })
           results.success++
         } catch (err: any) {
