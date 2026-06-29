@@ -80,7 +80,7 @@ export default async function postbackRoutes(server: FastifyInstance) {
       return { ok: true, reason: 'missing af_tranid' }
     }
 
-    const offer = await prisma.offer.findFirst({ where: { appId, mmpSource: MmpSource.APPSFLYER, status: 'ACTIVE' } })
+    const offer = await prisma.offer.findFirst({ where: { appId, mmpSource: MmpSource.APPSFLYER, status: 'ACTIVE' }, select: { id: true, name: true, currency: true, commissionType: true, commissionValue: true } })
     if (!offer) {
       await logPostback({ source: 'appsflyer', rawQuery: rawPayload, result: 'error', reason: `offer not found: appId=${appId}` })
       return { ok: true, reason: 'offer not found' }
@@ -133,7 +133,7 @@ export default async function postbackRoutes(server: FastifyInstance) {
       return { ok: true, reason: 'missing transaction_id' }
     }
 
-    const offer = await prisma.offer.findFirst({ where: { appId: appToken, mmpSource: MmpSource.ADJUST, status: 'ACTIVE' } })
+    const offer = await prisma.offer.findFirst({ where: { appId: appToken, mmpSource: MmpSource.ADJUST, status: 'ACTIVE' }, select: { id: true, name: true, currency: true, commissionType: true, commissionValue: true } })
     if (!offer) {
       await logPostback({ source: 'adjust', rawQuery: rawPayload, result: 'error', reason: `offer not found: appToken=${appToken}` })
       return { ok: true, reason: 'offer not found' }
@@ -195,7 +195,7 @@ export default async function postbackRoutes(server: FastifyInstance) {
       ? rawXid.trim()
       : `${appId || 'noOffer'}_${publisherId || 'noPub'}_${conversionTime || Date.now()}`
 
-    const offer = await prisma.offer.findFirst({ where: { appId, mmpSource: MmpSource.CITYADS, status: 'ACTIVE' } })
+    const offer = await prisma.offer.findFirst({ where: { appId, mmpSource: MmpSource.CITYADS, status: 'ACTIVE' }, select: { id: true, name: true, currency: true, commissionType: true, commissionValue: true } })
     if (!offer) {
       await logPostback({ source: 'cityads', rawQuery: rawPayload, result: 'error', reason: `offer not found: offer_id=${appId} (check CityAds Offer ID in offer settings)`, xid: sourceRefId })
       return { ok: true, reason: 'offer not found' }
