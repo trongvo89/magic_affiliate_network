@@ -11,6 +11,7 @@ interface Conversion {
   publisher?: { name: string; email: string } | null
   eventType: string
   revenue: number
+  advCommission: number
   commissionAmount: number
   currency: string
   status: string
@@ -405,7 +406,7 @@ export default function ConversionsPage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
               <tr>
-                {['Date', 'MMP', 'Offer', 'Publisher', 'Event', 'Revenue', 'Commission', 'Status', 'Actions', 'Postback'].map((h) => (
+                {['Date', 'MMP', 'Offer', 'Publisher', 'Event', 'Revenue', 'Adv Comm', 'Pub Comm', 'Magic Comm', 'Status', 'Actions', 'Postback'].map((h) => (
                   <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
                 ))}
               </tr>
@@ -419,7 +420,13 @@ export default function ConversionsPage() {
                   <td className="px-4 py-2.5 text-gray-600 cursor-pointer" onClick={() => setSelected(c)}>{c.publisher?.name || '—'}</td>
                   <td className="px-4 py-2.5 text-gray-600 capitalize cursor-pointer" onClick={() => setSelected(c)}>{c.eventType}</td>
                   <td className="px-4 py-2.5 text-gray-900 cursor-pointer" onClick={() => setSelected(c)}>{fmtMoney(c.revenue, c.currency)}</td>
-                  <td className="px-4 py-2.5 text-green-700 font-medium cursor-pointer" onClick={() => setSelected(c)}>{fmtMoney(c.commissionAmount, c.currency)}</td>
+                  <td className="px-4 py-2.5 text-blue-700 font-medium cursor-pointer" onClick={() => setSelected(c)}>{fmtMoney(c.advCommission, c.currency)}</td>
+                  <td className="px-4 py-2.5 text-orange-600 font-medium cursor-pointer" onClick={() => setSelected(c)}>{fmtMoney(c.commissionAmount, c.currency)}</td>
+                  <td className="px-4 py-2.5 font-medium cursor-pointer" onClick={() => setSelected(c)}>
+                    <span className={(c.advCommission - c.commissionAmount) >= 0 ? 'text-green-700' : 'text-red-600'}>
+                      {fmtMoney(c.advCommission - c.commissionAmount, c.currency)}
+                    </span>
+                  </td>
                   <td className="px-4 py-2.5 cursor-pointer" onClick={() => setSelected(c)}>{statusBadge(c.status)}</td>
                   <td className="px-4 py-2.5">
                     <div className="flex gap-1">
@@ -447,7 +454,7 @@ export default function ConversionsPage() {
                 </tr>
               ))}
               {conversions.length === 0 && (
-                <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">No conversions found</td></tr>
+                <tr><td colSpan={12} className="px-4 py-8 text-center text-gray-400">No conversions found</td></tr>
               )}
             </tbody>
           </table>
