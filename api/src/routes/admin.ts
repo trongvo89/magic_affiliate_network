@@ -925,6 +925,46 @@ export default async function adminRoutes(server: FastifyInstance) {
     }
   )
 
+  // Retry failed postbacks
+  server.post('/retry-failed-postbacks', async (request) => {
+    const logs = await (prisma as any).postbackLog.findMany({
+      where: { result: 'error', reason: { contains: 'logoUrl' } },
+      orderBy: { receivedAt: 'asc' },
+    })
+
+    if (logs.length === 0) return { retried: 0, message: 'No failed postbacks to retry' }
+
+    const results: { id: string; source: string; result: string; reason?: string }[] = []
+
+    for (const log of logs) {
+      const source = log.source
+      const rawQuery = log.rawQuery as Record<string, string>
+      try {
+        const port = process.env.PORT || '3000'
+        const params = new URLSearchParams(rawQuery as any).toString()
+        const res = await fetch(`http://127.0.0.1:${port}/postback/${source}?${params}`)
+        const body = await res.json() as any
+        results.push({ id: log.id, source, result: 'ok', reason: body.reason })
+      } catch (err: any) {
+        results.push({ id: log.id, source, result: 'error', reason: String(err) })
+      }
+    }
+
+    const user = request.user as any
+    await auditLog(prisma, {
+      userId: user.id, userName: user.name || user.email,
+      action: 'RETRY_POSTBACKS', entity: 'PostbackLog', entityId: 'batch',
+      changes: { total: logs.length, succeeded: results.filter(r => r.result === 'ok').length },
+    })
+
+    return {
+      retried: logs.length,
+      succeeded: results.filter(r => r.result === 'ok').length,
+      failed: results.filter(r => r.result === 'error').length,
+      details: results,
+    }
+  })
+
   // Audit Logs
   server.get<{ Querystring: { page?: string; limit?: string; entity?: string; action?: string } }>(
     '/audit-logs',
