@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { api, fmtMoney } from '@/lib/api'
+import { useLocale } from '@/lib/i18n'
 import { PerformanceChart, CommissionChart } from '@/components/DailyChart'
 
 interface Stats {
@@ -65,13 +66,6 @@ function startOfWeek(d: Date) {
 
 type Preset = 'today' | 'yesterday' | 'week' | 'month' | 'custom'
 
-const PRESETS: { key: Preset; label: string }[] = [
-  { key: 'today', label: 'Hôm nay' },
-  { key: 'yesterday', label: 'Hôm qua' },
-  { key: 'week', label: 'Tuần này' },
-  { key: 'month', label: 'Tháng này' },
-  { key: 'custom', label: 'Tùy chỉnh' },
-]
 
 function computePresetDates(preset: Preset): { from: string; to: string } | null {
   const now = new Date()
@@ -89,6 +83,16 @@ function computePresetDates(preset: Preset): { from: string; to: string } | null
 }
 
 export default function DashboardPage() {
+  const { t } = useLocale()
+
+  const PRESETS: { key: Preset; label: string }[] = [
+    { key: 'today', label: t('preset.today') },
+    { key: 'yesterday', label: t('preset.yesterday') },
+    { key: 'week', label: t('preset.week') },
+    { key: 'month', label: t('preset.month') },
+    { key: 'custom', label: t('preset.custom') },
+  ]
+
   const [stats, setStats] = useState<Stats | null>(null)
   const [daily, setDaily] = useState<DailyPoint[]>([])
   const [loading, setLoading] = useState(true)
@@ -210,7 +214,7 @@ export default function DashboardPage() {
         {/* Campaign filter */}
         <select value={offerId} onChange={e => setOfferId(e.target.value)}
           className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-900">
-          <option value="">Tất cả campaign</option>
+          <option value="">{t('dashboard.allCampaigns')}</option>
           {offers.map(o => <option key={o.offerId} value={o.offerId}>{o.offerName}</option>)}
         </select>
       </div>

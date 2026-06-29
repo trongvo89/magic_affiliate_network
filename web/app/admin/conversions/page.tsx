@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { api, fmtMoney, fmtDate } from '@/lib/api'
+import { useLocale } from '@/lib/i18n'
 
 interface Conversion {
   id: string
@@ -87,6 +88,7 @@ export default function ConversionsPage() {
   const [csvOfferLock, setCsvOfferLock] = useState('')
 
   const limit = 20
+  const { t } = useLocale()
 
   async function load() {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) })
@@ -198,14 +200,14 @@ export default function ConversionsPage() {
   function parseCsvCreate(text: string, valFrom = csvValidateFrom, valTo = csvValidateTo, offerLock = csvOfferLock) {
     setCsvError(''); setCsvResult(null)
     const lines = text.trim().split('\n').filter(Boolean)
-    if (lines.length < 2) { setCsvError('Cần ít nhất 1 dòng dữ liệu sau header'); setCsvParsed([]); return }
+    if (lines.length < 2) { setCsvError(t('csv.needDataRow')); setCsvParsed([]); return }
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
     const hasPublisher = headers.includes('publisher_id') || headers.includes('publisher_email')
     const hasOffer = !!offerLock || headers.includes('offer_id') || headers.includes('offer_name')
-    if (!hasPublisher) { setCsvError('Thiếu cột: publisher_id hoặc publisher_email'); setCsvParsed([]); return }
-    if (!hasOffer) { setCsvError('Thiếu cột: offer_id hoặc offer_name (hoặc chọn offer ở ô bên trên)'); setCsvParsed([]); return }
+    if (!hasPublisher) { setCsvError(t('csv.missingPublisher')); setCsvParsed([]); return }
+    if (!hasOffer) { setCsvError(t('csv.missingOffer')); setCsvParsed([]); return }
     const missingCols = ['event_type', 'event_at'].filter(r => !headers.includes(r))
-    if (missingCols.length) { setCsvError(`Thiếu cột: ${missingCols.join(', ')}`); setCsvParsed([]); return }
+    if (missingCols.length) { setCsvError(t('csv.missingCols', { cols: missingCols.join(', ') })); setCsvParsed([]); return }
 
     const pubEmailMap: Record<string, string> = {}
     for (const p of publishers) pubEmailMap[p.email.toLowerCase()] = p.id
@@ -240,8 +242,8 @@ export default function ConversionsPage() {
 
       const eventDate = new Date(row['event_at'])
       if (isNaN(eventDate.getTime())) { errors.push(`Row ${lineIdx + 2}: invalid event_at date`); return }
-      if (fromDate && eventDate < fromDate) { errors.push(`Row ${lineIdx + 2}: event_at ngoài khoảng (trước ${valFrom})`); return }
-      if (toDate && eventDate > toDate) { errors.push(`Row ${lineIdx + 2}: event_at ngoài khoảng (sau ${valTo})`); return }
+      if (fromDate && eventDate < fromDate) { errors.push(`Row ${lineIdx + 2}: ${t('csv.dateBeforeRange', { date: valFrom })}`); return }
+      if (toDate && eventDate > toDate) { errors.push(`Row ${lineIdx + 2}: ${t('csv.dateAfterRange', { date: valTo })}`); return }
 
       const status = row['status']?.toUpperCase()
       rows.push({
@@ -262,11 +264,11 @@ export default function ConversionsPage() {
   function parseCsvUpdate(text: string) {
     setCsvError(''); setCsvResult(null)
     const lines = text.trim().split('\n').filter(Boolean)
-    if (lines.length < 2) { setCsvError('Cần ít nhất 1 dòng dữ liệu sau header'); setCsvParsed([]); return }
+    if (lines.length < 2) { setCsvError(t('csv.needDataRow')); setCsvParsed([]); return }
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
     if (!headers.includes('status')) { setCsvError('Thiếu cột: status'); setCsvParsed([]); return }
     if (!headers.includes('source_ref_id') && !headers.includes('id')) {
-      setCsvError('Cần cột source_ref_id hoặc id'); setCsvParsed([]); return
+      setCsvError(t('csv.needSourceRefId')); setCsvParsed([]); return
     }
     const validStatuses = ['PENDING', 'APPROVED', 'REJECTED']
     const rows = lines.slice(1).map((line) => {
@@ -279,7 +281,7 @@ export default function ConversionsPage() {
         status: row['status']?.toUpperCase(),
       }
     }).filter(r => validStatuses.includes(r.status))
-    if (!rows.length) { setCsvError('Không có dòng hợp lệ (status phải là PENDING/APPROVED/REJECTED)'); setCsvParsed([]); return }
+    if (!rows.length) { setCsvError(t('csv.noValidRows')); setCsvParsed([]); return }
     setCsvParsed(rows)
   }
 
@@ -309,7 +311,7 @@ export default function ConversionsPage() {
       setCsvResult(data)
       if (data.success > 0) load()
     } catch (err: any) {
-      setCsvError(err.response?.data?.error || 'Upload thất bại')
+      setCsvError(err.response?.data?.error || t('csv.uploadFailed'))
     } finally {
       setCsvUploading(false)
     }
@@ -643,38 +645,38 @@ export default function ConversionsPage() {
                 onClick={() => { setCsvTab('create'); resetCsv() }}
                 className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${csvTab === 'create' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
               >
-                Tạo conversion mới
+                {t('csv.createNew')}
               </button>
               <button
                 onClick={() => { setCsvTab('update'); resetCsv() }}
                 className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${csvTab === 'update' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
               >
-                Cập nhật trạng thái
+                {t('csv.updateStatus')}
               </button>
             </div>
 
             {csvTab === 'create' ? (
               <div className="bg-gray-50 rounded-lg p-3 mb-3 text-xs text-gray-600">
-                <p className="font-medium mb-1">Cột bắt buộc:</p>
+                <p className="font-medium mb-1">{t('csv.requiredCols')}</p>
                 <code className="font-mono">event_type, event_at</code>
-                <p className="font-medium mt-2 mb-1">Publisher (một trong hai):</p>
-                <code className="font-mono">publisher_id</code> <span className="text-gray-400">hoặc</span> <code className="font-mono">publisher_email</code>
+                <p className="font-medium mt-2 mb-1">{t('csv.publisherOneOf')}</p>
+                <code className="font-mono">publisher_id</code> <span className="text-gray-400">{t('csv.or')}</span> <code className="font-mono">publisher_email</code>
                 {!csvOfferLock && (
                   <>
-                    <p className="font-medium mt-2 mb-1">Offer (một trong hai — bỏ qua nếu chọn offer ở dưới):</p>
-                    <code className="font-mono">offer_id</code> <span className="text-gray-400">hoặc</span> <code className="font-mono">offer_name</code>
+                    <p className="font-medium mt-2 mb-1">{t('csv.offerOneOf')}</p>
+                    <code className="font-mono">offer_id</code> <span className="text-gray-400">{t('csv.or')}</span> <code className="font-mono">offer_name</code>
                   </>
                 )}
-                <p className="font-medium mt-2 mb-1">Cột tùy chọn:</p>
+                <p className="font-medium mt-2 mb-1">{t('csv.optionalCols')}</p>
                 <code className="font-mono">revenue, source_ref_id, status</code>
-                <p className="mt-1 text-gray-400">status: PENDING (mặc định) · APPROVED · REJECTED</p>
+                <p className="mt-1 text-gray-400">{t('csv.statusDefault')}</p>
               </div>
             ) : (
               <div className="bg-blue-50 rounded-lg p-3 mb-3 text-xs text-blue-700">
-                <p className="font-medium mb-1">Upload kết quả từ advertiser — cột bắt buộc:</p>
+                <p className="font-medium mb-1">{t('csv.uploadResults')}</p>
                 <code className="font-mono">source_ref_id, status</code>
-                <p className="mt-1">hoặc dùng <code className="font-mono">id</code> thay cho <code className="font-mono">source_ref_id</code></p>
-                <p className="mt-1 text-blue-500">status hợp lệ: APPROVED · REJECTED · PENDING</p>
+                <p className="mt-1">{t('csv.orUseId', { id: 'id', sourceRefId: 'source_ref_id' })}</p>
+                <p className="mt-1 text-blue-500">{t('csv.validStatus')}</p>
               </div>
             )}
 
@@ -688,7 +690,7 @@ export default function ConversionsPage() {
               <div className="mb-4 space-y-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                    Áp dụng cho offer <span className="text-gray-400 font-normal">(tùy chọn — bỏ qua cột offer trong CSV)</span>
+                    {t('csv.applyToOffer')} <span className="text-gray-400 font-normal">{t('csv.optionalSkipOffer')}</span>
                   </label>
                   <select value={csvOfferLock}
                     onChange={e => {
@@ -697,15 +699,15 @@ export default function ConversionsPage() {
                       if (csvText) parseCsvCreate(csvText, csvValidateFrom, csvValidateTo, v)
                     }}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">— Tất cả / lấy từ CSV —</option>
+                    <option value="">{t('csv.allFromCsv')}</option>
                     {offers.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-600 mb-1.5">Kiểm tra ngày <span className="text-gray-400 font-normal">(tùy chọn — từ chối dòng ngoài khoảng)</span></p>
+                  <p className="text-xs font-medium text-gray-600 mb-1.5">{t('csv.validateDates')} <span className="text-gray-400 font-normal">{t('csv.optionalRejectOutside')}</span></p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Từ ngày</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('csv.fromDate')}</label>
                       <input type="date" value={csvValidateFrom}
                         onChange={e => {
                           const v = e.target.value
@@ -715,7 +717,7 @@ export default function ConversionsPage() {
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Đến ngày</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('csv.toDate')}</label>
                       <input type="date" value={csvValidateTo}
                         onChange={e => {
                           const v = e.target.value
@@ -731,11 +733,11 @@ export default function ConversionsPage() {
 
             {/* File upload */}
             <div className="mb-3">
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Chọn file CSV:</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('csv.selectFile')}</label>
               <input type="file" accept=".csv,text/csv" onChange={handleCsvFile}
                 className="text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-gray-300 file:text-sm file:font-medium file:bg-white hover:file:bg-gray-50 cursor-pointer w-full" />
             </div>
-            <p className="text-xs text-gray-400 mb-2">hoặc paste trực tiếp:</p>
+            <p className="text-xs text-gray-400 mb-2">{t('csv.orPaste')}</p>
 
             <textarea
               value={csvText}
@@ -767,13 +769,13 @@ export default function ConversionsPage() {
 
             {csvParsed.length > 0 && !csvError && (
               <p className="text-sm text-gray-600 mb-3">
-                <span className="font-medium text-green-700">{csvParsed.length} dòng</span> sẵn sàng upload
+                {t('csv.rowsReady', { count: csvParsed.length })}
               </p>
             )}
 
             {csvResult && (
               <div className={`rounded-lg p-3 mb-3 text-sm ${csvResult.failed === 0 ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>
-                <p className="font-medium">Kết quả: {csvResult.success} thành công, {csvResult.failed} thất bại</p>
+                <p className="font-medium">{t('csv.result', { success: csvResult.success, failed: csvResult.failed })}</p>
                 {csvResult.errors.map((e, i) => <p key={i} className="text-xs mt-1">{e}</p>)}
               </div>
             )}
@@ -781,7 +783,7 @@ export default function ConversionsPage() {
             <button onClick={submitCsv}
               disabled={csvUploading || csvParsed.length === 0 || !!csvError}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm">
-              {csvUploading ? 'Đang upload...' : `Upload ${csvParsed.length > 0 ? `${csvParsed.length} dòng` : ''}`}
+              {csvUploading ? t('csv.uploading') : csvParsed.length > 0 ? t('csv.uploadRows', { count: csvParsed.length }) : 'Upload'}
             </button>
           </div>
         </div>

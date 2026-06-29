@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { api, isImpersonating } from '@/lib/api'
+import { useLocale } from '@/lib/i18n'
 
 interface Profile {
   id: string
@@ -18,6 +19,7 @@ export default function SettingsPage() {
   const [testing, setTesting] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
+  const { t } = useLocale()
 
   useEffect(() => {
     api.get('/publisher/profile').then(({ data }) => {
@@ -101,7 +103,7 @@ export default function SettingsPage() {
                   className="text-sm text-orange-500 hover:text-orange-700 font-medium whitespace-nowrap"
                 >Copy</button>
               </div>
-              <p className="text-xs text-gray-400 mt-1">Gửi ID này cho Admin để được gắn vào postback URL của advertiser.</p>
+              <p className="text-xs text-gray-400 mt-1">{t('settings.sendIdToAdmin')}</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
@@ -128,13 +130,13 @@ export default function SettingsPage() {
             <p className="text-xs font-medium text-orange-800 mb-2">Available macros:</p>
             <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono text-orange-700">
               {[
-                ['{payout}', 'Hoa hồng được nhận'],
-                ['{event}', 'Loại event (sale, lead…)'],
-                ['{order_id}', 'Click/transaction ID từ MMP'],
-                ['{status}', 'Trạng thái (approved/pending/rejected)'],
-                ['{click_id}', 'Publisher ID của bạn'],
-                ['{offer_id}', 'ID offer trong Magic'],
-                ['{offer_name}', 'Tên offer trong Magic'],
+                ['{payout}', t('settings.commissionReceived')],
+                ['{event}', t('settings.eventType')],
+                ['{order_id}', t('settings.clickTransactionId')],
+                ['{status}', t('settings.status')],
+                ['{click_id}', t('settings.yourPublisherId')],
+                ['{offer_id}', t('settings.offerIdInMagic')],
+                ['{offer_name}', t('settings.offerNameInMagic')],
               ].map(([macro, desc]) => (
                 <div key={macro} className="flex items-baseline gap-2">
                   <span className="font-semibold whitespace-nowrap">{macro}</span>

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { api, fmtMoney } from '@/lib/api'
+import { useLocale } from '@/lib/i18n'
 
 function toDateStr(d: Date) {
   return d.toISOString().slice(0, 10)
@@ -78,6 +79,7 @@ export default function OffersPage() {
   const [breakdown, setBreakdown] = useState<Record<string, PubBreakdown[]>>({})
   const [loadingBreakdown, setLoadingBreakdown] = useState<string | null>(null)
   const [uploadingLogo, setUploadingLogo] = useState<string | null>(null)
+  const { t } = useLocale()
 
   async function handleLogoUpload(offerId: string, file: File) {
     setUploadingLogo(offerId)
@@ -520,9 +522,9 @@ export default function OffersPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <div className="text-xs text-orange-800">
-                    <p className="font-semibold mb-0.5">CityAds CPS — Tự động chia hoa hồng</p>
-                    <p>Publisher nhận <strong>70%</strong> doanh thu CityAds báo về · Magic giữ <strong>30%</strong></p>
-                    <p className="text-orange-600 mt-0.5">Có thể điều chỉnh tỷ lệ ở ô "Pub Share (%)" bên dưới nếu cần</p>
+                    <p className="font-semibold mb-0.5">{t('adminOffers.cityadsCps')}</p>
+                    <p>{t('adminOffers.cityadsDesc')}</p>
+                    <p className="text-orange-600 mt-0.5">{t('adminOffers.cityadsAdjust')}</p>
                   </div>
                 </div>
               )}
@@ -568,7 +570,7 @@ export default function OffersPage() {
                     placeholder="https://cityads.com/offer/..."
                   />
                   <p className="text-xs text-gray-400 mt-1">CityAds offer landing page — publishers will be redirected here</p>
-                  <p className="text-xs text-orange-600 mt-2 font-medium">Postback URL mẫu đăng ký với CityAds:</p>
+                  <p className="text-xs text-orange-600 mt-2 font-medium">{t('adminOffers.cityadsPostback')}</p>
                   <code className="block text-[10px] text-gray-500 mt-1 break-all leading-relaxed">
                     {`{API_URL}/postback/cityads?xid={xid}&offer_id={offer_id}&payout={payout}&payout_currency={currency}&sa={sa}&status={status}&action_type={action_type}&conversion_time={conversion_time}`}
                   </code>
