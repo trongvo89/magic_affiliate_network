@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Conversion" ADD COLUMN "advCommission" DOUBLE PRECISION NOT NULL DEFAULT 0;

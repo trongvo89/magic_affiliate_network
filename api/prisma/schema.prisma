@@ -98,6 +98,7 @@ model Conversion {
   publisher        User?      @relation(fields: [publisherId], references: [id])
   eventType        String
   revenue          Float      @default(0)
+  advCommission    Float      @default(0)
   commissionAmount Float      @default(0)
   currency         String     @default("USD")
   status           ConvStatus @default(PENDING)
