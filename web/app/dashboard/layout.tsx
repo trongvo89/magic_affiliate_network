@@ -4,10 +4,12 @@ import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { api, fetchUser, logout, clearUserCache, isImpersonating } from '@/lib/api'
 import { LogoMark } from '@/components/LogoMark'
+import { LocaleProvider, useLocale } from '@/lib/i18n'
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
+  const { locale, setLocale } = useLocale()
   const [user, setUser] = useState<any>(null)
   const [impersonating, setImpersonating] = useState(false)
 
@@ -119,6 +121,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           )}
           <button
+            onClick={() => setLocale(locale === 'vi' ? 'en' : 'vi')}
+            className="w-full flex items-center justify-center gap-1 px-3 py-1.5 rounded-full bg-white/5 text-xs font-medium mb-2"
+          >
+            <span className={locale === 'en' ? 'text-orange-400' : 'text-slate-500'}>EN</span>
+            <span className="text-slate-600">|</span>
+            <span className={locale === 'vi' ? 'text-orange-400' : 'text-slate-500'}>VI</span>
+          </button>
+          <button
             onClick={logout}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
           >
@@ -142,4 +152,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </main>
     </div>
   )
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return <LocaleProvider><DashboardLayoutInner>{children}</DashboardLayoutInner></LocaleProvider>
 }

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { api, fetchUser } from '@/lib/api'
+import { useLocale } from '@/lib/i18n'
 
 interface Offer {
   id: string
@@ -21,6 +22,7 @@ export default function PublisherOffersPage() {
   const [pubId, setPubId] = useState('')
   const [deeplinkOfferId, setDeeplinkOfferId] = useState<string | null>(null)
   const [deeplinkUrl, setDeeplinkUrl] = useState('')
+  const { t } = useLocale()
 
   useEffect(() => { fetchUser().then(u => setPubId(u?.id ?? '')) }, [])
 
@@ -77,7 +79,7 @@ export default function PublisherOffersPage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Tìm kiếm offer..."
+            placeholder={t('offers.search')}
             className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent" />
         </div>
       </div>
@@ -89,7 +91,7 @@ export default function PublisherOffersPage() {
       {loading && <div className="text-center text-gray-400 py-12">Loading...</div>}
 
       {!loading && filtered.length === 0 && (
-        <div className="text-center text-gray-400 py-12">{search ? 'Không tìm thấy offer nào' : 'Chưa có offer nào'}</div>
+        <div className="text-center text-gray-400 py-12">{search ? t('offers.notFound') : t('offers.empty')}</div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -146,14 +148,14 @@ export default function PublisherOffersPage() {
                 <svg className={`w-3 h-3 transition-transform ${deeplinkOfferId === o.id ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
-                Tạo Deeplink
+                {t('offers.createDeeplink')}
               </button>
 
               {deeplinkOfferId === o.id && (
                 <div className="mt-2.5 bg-orange-50 rounded-lg p-3 border border-orange-100">
                   <input type="url" value={deeplinkUrl}
                     onChange={e => setDeeplinkUrl(e.target.value)}
-                    placeholder="Nhập URL đích, vd: https://shopee.vn/product/123"
+                    placeholder={t('offers.deeplinkPlaceholder')}
                     className="w-full text-sm border border-orange-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 placeholder:text-gray-400" />
                   {deeplinkUrl && (
                     <div className="mt-2 bg-white rounded-lg p-2.5 border border-orange-200">

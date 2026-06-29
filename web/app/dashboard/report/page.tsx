@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { api, fmtMoney, fmtDate } from '@/lib/api'
+import { useLocale } from '@/lib/i18n'
 
 function toDateStr(d: Date) { return d.toISOString().slice(0, 10) }
 
@@ -12,13 +13,6 @@ function startOfWeek(d: Date) {
 
 type Preset = 'today' | 'yesterday' | 'week' | 'month' | 'custom'
 
-const PRESETS: { key: Preset; label: string }[] = [
-  { key: 'today', label: 'Hôm nay' },
-  { key: 'yesterday', label: 'Hôm qua' },
-  { key: 'week', label: 'Tuần này' },
-  { key: 'month', label: 'Tháng này' },
-  { key: 'custom', label: 'Tùy chỉnh' },
-]
 
 const DISPLAY_CURRENCIES = ['USD', 'VND', 'RUB']
 
@@ -98,6 +92,15 @@ export default function ReportPage() {
   const [convLoading, setConvLoading] = useState(false)
   const [convTotal, setConvTotal] = useState(0)
   const [convPage, setConvPage] = useState(1)
+  const { t } = useLocale()
+
+  const PRESETS: { key: Preset; label: string }[] = [
+    { key: 'today', label: t('preset.today') },
+    { key: 'yesterday', label: t('preset.yesterday') },
+    { key: 'week', label: t('preset.week') },
+    { key: 'month', label: t('preset.month') },
+    { key: 'custom', label: t('preset.custom') },
+  ]
 
   useEffect(() => { fetchRates().then(r => { setRates(r); setRatesLoaded(true) }) }, [])
 

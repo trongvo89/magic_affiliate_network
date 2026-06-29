@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { api, fmtMoney, fmtDate } from '@/lib/api'
+import { useLocale } from '@/lib/i18n'
 
 interface Act {
   id: string
@@ -147,6 +148,7 @@ export default function ActDetailPage() {
   const [paymentForm, setPaymentForm] = useState(BLANK_PAYMENT)
   const [paymentSaving, setPaymentSaving] = useState(false)
   const [paymentError, setPaymentError] = useState('')
+  const { t } = useLocale()
 
   const loadAct = useCallback(async () => {
     setActLoading(true); setActError('')
@@ -327,7 +329,7 @@ export default function ActDetailPage() {
               <div>
                 <p className="font-medium">Upload complete: {uploadResult?.matched ?? 0} matched, {uploadResult?.unmatched ?? 0} unmatched</p>
                 {(uploadResult?.unmatchedConversions ?? 0) > 0 && (
-                  <p className="text-xs mt-1 text-yellow-700">{uploadResult?.unmatchedConversions} conversion(s) trong hệ thống không có trong CSV advertiser</p>
+                  <p className="text-xs mt-1 text-yellow-700">{uploadResult?.unmatchedConversions} {t('finance.conversionsMissingFromCsv')}</p>
                 )}
               </div>
             )}
@@ -540,7 +542,7 @@ export default function ActDetailPage() {
             className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-red-50/50 transition-colors">
             <div>
               <h2 className="text-base font-semibold text-red-700">Conversions Missing from Advertiser Report</h2>
-              <p className="text-xs text-red-500 mt-0.5">{recon.unmatchedConversions} conversion(s) có trong hệ thống nhưng advertiser không báo</p>
+              <p className="text-xs text-red-500 mt-0.5">{recon.unmatchedConversions} {t('finance.conversionsNotReported')}</p>
             </div>
             <span className="text-gray-400 text-lg">{showUnmatched ? '▲' : '▼'}</span>
           </button>
