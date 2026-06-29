@@ -29,6 +29,8 @@ export default function PostbackLogsPage() {
   const [sourceFilter, setSourceFilter] = useState('')
   const [resultFilter, setResultFilter] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [retrying, setRetrying] = useState(false)
+  const [retryResult, setRetryResult] = useState<{ retried: number; succeeded: number; failed: number } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -50,6 +52,22 @@ export default function PostbackLogsPage() {
 
   const okCount = logs.filter((l) => l.result === 'ok').length
   const errCount = logs.filter((l) => l.result === 'error').length
+  const retryableCount = logs.filter((l) => l.result === 'error' && l.reason?.includes('logoUrl')).length
+
+  async function retryFailed() {
+    if (!confirm(`Retry ${retryableCount} failed postback(s)?`)) return
+    setRetrying(true)
+    setRetryResult(null)
+    try {
+      const { data } = await api.post('/admin/retry-failed-postbacks')
+      setRetryResult(data)
+      load()
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Retry failed')
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   return (
     <div className="p-6">
@@ -58,10 +76,18 @@ export default function PostbackLogsPage() {
           <h1 className="text-xl font-bold text-gray-900">Postback Logs</h1>
           <p className="text-sm text-gray-500 mt-0.5">Track all incoming postbacks and diagnose failures</p>
         </div>
-        <button onClick={load} disabled={loading}
-          className="text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50">
-          {loading ? 'Loading...' : 'Refresh'}
-        </button>
+        <div className="flex gap-2">
+          {retryableCount > 0 && (
+            <button onClick={retryFailed} disabled={retrying}
+              className="text-sm bg-orange-500 text-white px-3 py-1.5 rounded-lg hover:bg-orange-600 disabled:opacity-50">
+              {retrying ? 'Retrying...' : `Retry Failed (${retryableCount})`}
+            </button>
+          )}
+          <button onClick={load} disabled={loading}
+            className="text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+            {loading ? 'Loading...' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {/* Summary */}
@@ -96,6 +122,12 @@ export default function PostbackLogsPage() {
           <option value="error">Errors only</option>
         </select>
       </div>
+
+      {retryResult && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4 text-green-700 text-sm">
+          Retry complete: {retryResult.succeeded} succeeded, {retryResult.failed} failed (total: {retryResult.retried})
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-red-700 text-sm">{error}</div>
