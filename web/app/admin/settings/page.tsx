@@ -104,21 +104,20 @@ const MMP_CONFIGS = [
     ] as ParamRow[],
   },
   {
-    key: 'cityads',
-    label: 'CityAds',
-    path: '/postback/cityads',
-    events: ['conversion', 'sale', 'lead', 'install', 'registration'],
-    attributionField: 'sa',
+    key: 's2s',
+    label: 'Direct S2S',
+    path: '/postback/s2s',
+    events: ['install', 'registration', 'loan_application', 'loan_approved', 'first_disbursement', 'repayment'],
+    attributionField: 'pub',
     params: [
-      { name: 'offer_id', required: 'Required', desc: 'Offer App ID in Magic (matches CityAds offer ID)', example: '38407' },
-      { name: 'xid', required: 'Recommended', desc: 'Unique conversion ID for deduplication. Falls back to action_id → click_id', example: 'xid_abc123' },
-      { name: 'sa', required: 'Required', desc: 'Magic Publisher ID — pass sub-affiliate ID for attribution', example: 'cm9abc...' },
-      { name: 'action_type', required: 'Optional', desc: 'Event type. Defaults to "conversion"', example: 'sale' },
-      { name: 'open_commission', required: 'Optional', desc: 'Commission amount in source currency (multiplied by exchange rate)', example: '1500.00' },
-      { name: 'order_total', required: 'Optional', desc: 'Order/revenue value', example: '850000' },
-      { name: 'payout_currency', required: 'Optional', desc: 'Currency code for commission', example: 'RUB' },
-      { name: 'status', required: 'Optional', desc: '"1"/"approved" → Approved · "3"/"rejected"/"declined" → Rejected · else → Pending', example: '1' },
-      { name: 'conversion_time', required: 'Optional', desc: 'Event timestamp (Unix timestamp or ISO string)', example: '1751194800' },
+      { name: 'offer_id', required: 'Required', desc: 'Offer App ID registered in Magic system (provided by Magic team)', example: 'SHB001' },
+      { name: 'transaction_id', required: 'Required', desc: 'Unique conversion ID — used for deduplication. Must be unique per event.', example: 'conv_20260629_001' },
+      { name: 'pub', required: 'Recommended', desc: 'Magic Publisher ID — captured from click URL {pub} parameter. Required for attribution.', example: 'cm9abc...' },
+      { name: 'event', required: 'Optional', desc: 'Event type name. Defaults to "conversion" if omitted.', example: 'loan_approved' },
+      { name: 'revenue', required: 'Optional', desc: 'Loan amount or order value (numeric float)', example: '5000000' },
+      { name: 'currency', required: 'Optional', desc: 'Currency code (ISO 4217). Defaults to VND if omitted.', example: 'VND' },
+      { name: 'status', required: 'Optional', desc: '"approved" or "1" → Approved · "rejected" or "3" → Rejected · omit → Pending', example: 'approved' },
+      { name: 'timestamp', required: 'Optional', desc: 'Event time as Unix timestamp (seconds) or ISO 8601 string. Defaults to now.', example: '2026-06-29T10:00:00Z' },
     ] as ParamRow[],
   },
 ]
@@ -126,7 +125,7 @@ const MMP_CONFIGS = [
 export default function AdminSettingsPage() {
   const [config, setConfig] = useState<PublicConfig | null>(null)
   const [apiUrl, setApiUrl] = useState('')
-  const [activeTab, setActiveTab] = useState('cityads')
+  const [activeTab, setActiveTab] = useState('s2s')
   const { t } = useLocale()
 
   useEffect(() => {
@@ -259,7 +258,7 @@ export default function AdminSettingsPage() {
           {[
             { label: 'AppsFlyer', path: '/postback/appsflyer' },
             { label: 'Adjust', path: '/postback/adjust' },
-            { label: 'CityAds', path: '/postback/cityads' },
+            { label: 'Direct S2S', path: '/postback/s2s' },
           ].map(({ label, path }) => (
             <div key={label}>
               <p className="text-xs font-medium text-gray-500 mb-1">{label}</p>
@@ -353,8 +352,8 @@ export default function AdminSettingsPage() {
             {activeMmp.key === 'adjust' && (
               <CodeLine>{`${apiUrl}/postback/adjust?app_token=abc123&transaction_id=txn_123&partner_parameter_1=PUBLISHER_ID&event_token=purchase&revenue=75.00&currency=USD`}</CodeLine>
             )}
-            {activeMmp.key === 'cityads' && (
-              <CodeLine>{`${apiUrl}/postback/cityads?offer_id=38407&xid=xid_123&sa=PUBLISHER_ID&action_type=sale&open_commission=1500&payout_currency=RUB&status=1`}</CodeLine>
+            {activeMmp.key === 's2s' && (
+              <CodeLine>{`${apiUrl}/postback/s2s?offer_id=SHB001&transaction_id=conv_001&pub=PUBLISHER_ID&event=loan_approved&revenue=5000000&currency=VND&status=approved`}</CodeLine>
             )}
           </div>
         </div>
