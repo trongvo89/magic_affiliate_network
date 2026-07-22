@@ -17,26 +17,25 @@ export default async function clickRoutes(server: FastifyInstance) {
       return reply.code(404).type('text/plain').send('Offer not found')
     }
 
-    setImmediate(async () => {
-      try {
-        await prisma.click.create({
-          data: {
-            offerId: offer.id,
-            publisherId: publisherId || null,
-            ip: request.ip || null,
-            userAgent: request.headers['user-agent'] || null,
-          },
-        })
-      } catch (err) {
-        console.error('[click] failed to log click:', err)
-      }
-    })
+    let clickId: string | null = null
+    try {
+      const click = await prisma.click.create({
+        data: {
+          offerId: offer.id,
+          publisherId: publisherId || null,
+          ip: request.ip || null,
+          userAgent: request.headers['user-agent'] || null,
+        },
+      })
+      clickId = click.id
+    } catch (err) {
+      console.error('[click] failed to log click:', err)
+    }
 
     let dest = offer.destinationUrl
-    if (publisherId) {
-      const sep = dest.includes('?') ? '&' : '?'
-      dest = `${dest}${sep}sa=${encodeURIComponent(publisherId)}`
-    }
+    const sep = dest.includes('?') ? '&' : '?'
+    if (publisherId) dest = `${dest}${sep}sa=${encodeURIComponent(publisherId)}`
+    if (clickId) dest = `${dest}&click_id=${encodeURIComponent(clickId)}`
 
     return reply.redirect(302, dest)
   }
