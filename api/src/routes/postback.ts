@@ -258,6 +258,8 @@ export default async function postbackRoutes(server: FastifyInstance) {
         await handleAdjust(query as AdjustQuery, rawPayload)
       } else if (source === 'cityads') {
         await handleCityAds(query as CityAdsQuery, rawPayload)
+      } else if (source === 's2s') {
+        await handleS2S(query as S2SQuery, rawPayload)
       } else {
         await logPostback({ source, rawQuery: rawPayload, result: 'error', reason: `unknown source: ${source}` })
       }
@@ -271,6 +273,80 @@ export default async function postbackRoutes(server: FastifyInstance) {
 
   server.get<{ Params: { source: string } }>('/:source', handler)
   server.post<{ Params: { source: string } }>('/:source', handler)
+}
+
+interface S2SQuery {
+  offer_id?: string
+  transaction_id?: string
+  pub?: string
+  event?: string
+  revenue?: string
+  currency?: string
+  status?: string
+  timestamp?: string
+  [key: string]: string | undefined
+}
+
+async function handleS2S(query: S2SQuery, rawPayload: Record<string, unknown>) {
+  const sourceRefId = query.transaction_id
+  const offerId = query.offer_id
+  const publisherId = query.pub
+  const eventType = query.event || 'conversion'
+  const revenue = parseFloat(query.revenue || '0') || 0
+  const rawCurrency = query.currency || null
+  const eventAt = query.timestamp ? new Date(isNaN(Number(query.timestamp)) ? query.timestamp : Number(query.timestamp) * 1000) : new Date()
+
+  if (!sourceRefId) {
+    await logPostback({ source: 's2s', rawQuery: rawPayload, result: 'error', reason: 'missing transaction_id' })
+    return { ok: true }
+  }
+  if (!offerId) {
+    await logPostback({ source: 's2s', rawQuery: rawPayload, result: 'error', reason: 'missing offer_id' })
+    return { ok: true }
+  }
+
+  const offer = await prisma.offer.findFirst({ where: { appId: offerId, status: 'ACTIVE' }, select: { id: true, name: true, currency: true, commissionType: true, commissionValue: true, mmpSource: true } })
+  if (!offer) {
+    await logPostback({ source: 's2s', rawQuery: rawPayload, result: 'error', reason: `offer not found: offer_id=${offerId}` })
+    return { ok: true }
+  }
+
+  const currency = offer.currency || rawCurrency || 'USD'
+  const publisher = publisherId ? await prisma.user.findUnique({ where: { id: publisherId } }) : null
+  const commissionAmount = calculateCommission(offer.commissionType as CommType, offer.commissionValue, revenue)
+
+  const rawStatus = (query.status || '').toLowerCase()
+  let status: 'APPROVED' | 'PENDING' | 'REJECTED'
+  if (rawStatus === 'approved' || rawStatus === '1') status = 'APPROVED'
+  else if (rawStatus === 'rejected' || rawStatus === '3' || rawStatus === 'declined') status = 'REJECTED'
+  else status = determineStatus({ publisherId, publisher, commissionType: offer.commissionType as CommType, revenue })
+
+  try {
+    const conversion = await prisma.conversion.create({
+      data: {
+        sourceType: offer.mmpSource, sourceRefId,
+        offerId: offer.id, publisherId: publisher?.id ?? null,
+        eventType, revenue, advCommission: revenue, commissionAmount, currency, status,
+        rawPayload: rawPayload as any, eventAt,
+      },
+    })
+    await logPostback({ source: 's2s', rawQuery: rawPayload, result: 'ok', conversionId: conversion.id, offerId: offer.id, publisherId: publisher?.id, xid: sourceRefId, status })
+
+    if (publisher?.postbackUrl) {
+      setImmediate(() => sendOutboundPostback(prisma, conversion.id, publisher.postbackUrl!, {
+        click_id: publisher.id, payout: String(commissionAmount), event: eventType,
+        order_id: sourceRefId, status: status.toLowerCase(), offer_id: offer.id, offer_name: offer.name,
+      }))
+    }
+  } catch (err: any) {
+    if (err.code === 'P2002') {
+      await logPostback({ source: 's2s', rawQuery: rawPayload, result: 'error', reason: 'duplicate transaction_id', xid: sourceRefId, offerId: offer.id })
+      return { ok: true }
+    }
+    throw err
+  }
+
+  return { ok: true }
 }
 
 function calculateCommission(type: CommType, value: number, revenue: number): number {
