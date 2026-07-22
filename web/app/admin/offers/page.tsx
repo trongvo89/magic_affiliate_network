@@ -509,7 +509,7 @@ export default function OffersPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Commission Type</label>
                   <select
                     value={form.commissionType}
-                    disabled={form.mmpSource === 'CITYADS' || form.mmpSource === 'DIRECT_S2S'}
+                    disabled={form.mmpSource === 'CITYADS'}
                     onChange={(e) => setForm({ ...form, commissionType: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:bg-gray-50 disabled:text-gray-400"
                   >
@@ -547,18 +547,18 @@ export default function OffersPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {form.mmpSource === 'CITYADS' || form.mmpSource === 'DIRECT_S2S' ? 'Pub Share (%)' : 'Value'}
+                    {form.mmpSource === 'CITYADS' ? 'Pub Share (%)' : 'Value'}
                   </label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
-                    max={form.mmpSource === 'CITYADS' || form.mmpSource === 'DIRECT_S2S' ? '100' : undefined}
+                    max={form.mmpSource === 'CITYADS' ? '100' : undefined}
                     required
                     value={form.commissionValue}
                     onChange={(e) => setForm({ ...form, commissionValue: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    placeholder={form.mmpSource === 'CITYADS' || form.mmpSource === 'DIRECT_S2S' ? '70' : form.commissionType === 'FLAT_CPA' ? '2.00' : '8'}
+                    placeholder={form.mmpSource === 'CITYADS' ? '70' : form.commissionType === 'FLAT_CPA' ? '2.00' : '8'}
                   />
                 </div>
                 <div>
