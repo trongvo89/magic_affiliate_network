@@ -271,23 +271,19 @@ export default async function postbackRoutes(server: FastifyInstance) {
     return { ok: true }
   }
 
-  server.get<{ Params: { source: string } }>('/:source', handler)
-  server.post<{ Params: { source: string } }>('/:source', handler)
-}
+  interface S2SQuery {
+    offer_id?: string
+    transaction_id?: string
+    pub?: string
+    event?: string
+    revenue?: string
+    currency?: string
+    status?: string
+    timestamp?: string
+    [key: string]: string | undefined
+  }
 
-interface S2SQuery {
-  offer_id?: string
-  transaction_id?: string
-  pub?: string
-  event?: string
-  revenue?: string
-  currency?: string
-  status?: string
-  timestamp?: string
-  [key: string]: string | undefined
-}
-
-async function handleS2S(query: S2SQuery, rawPayload: Record<string, unknown>) {
+  async function handleS2S(query: S2SQuery, rawPayload: Record<string, unknown>) {
   const sourceRefId = query.transaction_id
   const offerId = query.offer_id
   const publisherId = query.pub
@@ -346,7 +342,11 @@ async function handleS2S(query: S2SQuery, rawPayload: Record<string, unknown>) {
     throw err
   }
 
-  return { ok: true }
+    return { ok: true }
+  }
+
+  server.get<{ Params: { source: string } }>('/:source', handler)
+  server.post<{ Params: { source: string } }>('/:source', handler)
 }
 
 function calculateCommission(type: CommType, value: number, revenue: number): number {
