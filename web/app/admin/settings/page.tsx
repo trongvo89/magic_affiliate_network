@@ -7,14 +7,14 @@ interface PublicConfig {
   trackingDomain: string | null
 }
 
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false)
   return (
     <button
       onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
       className={`ml-2 text-xs px-2 py-0.5 rounded border transition-colors ${copied ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}
     >
-      {copied ? '✓' : 'Copy'}
+      {copied ? '✓' : label}
     </button>
   )
 }
