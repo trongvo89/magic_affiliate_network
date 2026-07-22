@@ -276,8 +276,13 @@ export default function AdminSettingsPage() {
       {/* Postback API Reference */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mt-6">
         <div className="px-6 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-900">Postback API Reference</h2>
-          <p className="text-xs text-gray-400 mt-0.5">Full parameter documentation for partner integration</p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="font-semibold text-gray-900">Postback API Reference</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Full parameter documentation for partner integration</p>
+            </div>
+            <CopyButton text={`${apiUrl}/docs/integration`} label="📋 Copy partner link" />
+          </div>
         </div>
 
         {/* MMP Tabs */}
