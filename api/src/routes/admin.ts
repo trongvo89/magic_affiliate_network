@@ -6,7 +6,7 @@ const offerSelect = {
   id: true, name: true, appId: true, appName: true,
   mmpSource: true, status: true, currency: true,
   commissionType: true, commissionValue: true,
-  pubCommissionDisplay: true,
+  pubCommissionDisplay: true, destinationUrl: true,
   createdAt: true,
 } as const
 
