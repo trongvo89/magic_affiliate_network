@@ -163,7 +163,7 @@ export default function OffersPage() {
     setError('')
     setSaving(true)
     try {
-      const payload = { ...form, commissionValue: parseFloat(form.commissionValue), destinationUrl: form.destinationUrl || undefined }
+      const payload = { ...form, commissionValue: parseFloat(form.commissionValue), destinationUrl: form.destinationUrl || undefined, mmpSource: form.mmpSource === 'DIRECT_S2S' ? 'CITYADS' : form.mmpSource }
       if (editingOffer) {
         await api.put(`/admin/offers/${editingOffer.id}`, payload)
       } else {
@@ -465,9 +465,9 @@ export default function OffersPage() {
                 { label: 'Offer Name', key: 'name', placeholder: 'e.g. Shopee App VN' },
                 { label: 'App Name', key: 'appName', placeholder: 'e.g. Shopee' },
                 {
-                  label: form.mmpSource === 'CITYADS' ? 'CityAds Offer ID' : 'App ID / App Token',
+                  label: form.mmpSource === 'CITYADS' ? 'CityAds Offer ID' : form.mmpSource === 'DIRECT_S2S' ? 'Offer App ID' : 'App ID / App Token',
                   key: 'appId',
-                  placeholder: form.mmpSource === 'CITYADS' ? 'e.g. 12345' : 'com.example.app',
+                  placeholder: form.mmpSource === 'CITYADS' ? 'e.g. 12345' : form.mmpSource === 'DIRECT_S2S' ? 'e.g. SHB001' : 'com.example.app',
                 },
               ].map((f) => (
                 <div key={f.key}>
@@ -491,6 +491,8 @@ export default function OffersPage() {
                       const src = e.target.value
                       if (src === 'CITYADS') {
                         setForm({ ...form, mmpSource: src, commissionType: 'PERCENT_REVENUE', commissionValue: '70' })
+                      } else if (src === 'DIRECT_S2S') {
+                        setForm({ ...form, mmpSource: src, commissionType: 'FLAT_CPA', commissionValue: '' })
                       } else {
                         setForm({ ...form, mmpSource: src, commissionType: 'FLAT_CPA', commissionValue: '' })
                       }
@@ -500,13 +502,14 @@ export default function OffersPage() {
                     <option value="APPSFLYER">AppsFlyer</option>
                     <option value="ADJUST">Adjust</option>
                     <option value="CITYADS">CityAds</option>
+                    <option value="DIRECT_S2S">Direct S2S</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Commission Type</label>
                   <select
                     value={form.commissionType}
-                    disabled={form.mmpSource === 'CITYADS'}
+                    disabled={form.mmpSource === 'CITYADS' || form.mmpSource === 'DIRECT_S2S'}
                     onChange={(e) => setForm({ ...form, commissionType: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:bg-gray-50 disabled:text-gray-400"
                   >
@@ -516,6 +519,18 @@ export default function OffersPage() {
                 </div>
               </div>
 
+              {form.mmpSource === 'DIRECT_S2S' && (
+                <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 flex items-start gap-3">
+                  <svg className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="text-xs text-blue-800">
+                    <p className="font-semibold mb-0.5">Direct S2S — Generic postback endpoint</p>
+                    <p>Advertiser fires postback directly to Magic using <code className="font-mono bg-blue-100 px-1 rounded">/postback/s2s</code>. No MMP required.</p>
+                    <p className="text-blue-600 mt-0.5">Set Pub Share (%) to define publisher's cut of the reported revenue.</p>
+                  </div>
+                </div>
+              )}
               {form.mmpSource === 'CITYADS' && (
                 <div className="bg-orange-50 border border-orange-100 rounded-lg px-4 py-3 flex items-start gap-3">
                   <svg className="w-4 h-4 text-orange-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -532,18 +547,18 @@ export default function OffersPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {form.mmpSource === 'CITYADS' ? 'Pub Share (%)' : 'Value'}
+                    {form.mmpSource === 'CITYADS' || form.mmpSource === 'DIRECT_S2S' ? 'Pub Share (%)' : 'Value'}
                   </label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
-                    max={form.mmpSource === 'CITYADS' ? '100' : undefined}
+                    max={form.mmpSource === 'CITYADS' || form.mmpSource === 'DIRECT_S2S' ? '100' : undefined}
                     required
                     value={form.commissionValue}
                     onChange={(e) => setForm({ ...form, commissionValue: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    placeholder={form.mmpSource === 'CITYADS' ? '70' : form.commissionType === 'FLAT_CPA' ? '2.00' : '8'}
+                    placeholder={form.mmpSource === 'CITYADS' || form.mmpSource === 'DIRECT_S2S' ? '70' : form.commissionType === 'FLAT_CPA' ? '2.00' : '8'}
                   />
                 </div>
                 <div>
@@ -559,7 +574,7 @@ export default function OffersPage() {
                   </select>
                 </div>
               </div>
-              {form.mmpSource === 'CITYADS' && (
+              {(form.mmpSource === 'CITYADS' || form.mmpSource === 'DIRECT_S2S') && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Destination URL</label>
                   <input
@@ -567,13 +582,24 @@ export default function OffersPage() {
                     value={form.destinationUrl}
                     onChange={(e) => setForm({ ...form, destinationUrl: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    placeholder="https://cityads.com/offer/..."
+                    placeholder={form.mmpSource === 'DIRECT_S2S' ? 'https://shbfinance.com/offer/...' : 'https://cityads.com/offer/...'}
                   />
-                  <p className="text-xs text-gray-400 mt-1">CityAds offer landing page — publishers will be redirected here</p>
-                  <p className="text-xs text-orange-600 mt-2 font-medium">{t('adminOffers.cityadsPostback')}</p>
-                  <code className="block text-[10px] text-gray-500 mt-1 break-all leading-relaxed">
-                    {`{API_URL}/postback/cityads?xid={xid}&offer_id={offer_id}&payout={payout}&payout_currency={currency}&sa={sa}&status={status}&action_type={action_type}&conversion_time={conversion_time}`}
-                  </code>
+                  <p className="text-xs text-gray-400 mt-1">Offer landing page — publishers will be redirected here</p>
+                  {form.mmpSource === 'DIRECT_S2S' ? (
+                    <>
+                      <p className="text-xs text-orange-600 mt-2 font-medium">Sample postback URL to register with advertiser:</p>
+                      <code className="block text-[10px] text-gray-500 mt-1 break-all leading-relaxed">
+                        {`{API_URL}/postback/s2s?offer_id={offer_id}&transaction_id={transaction_id}&pub={pub}&event={event}&revenue={revenue}&currency={currency}&status={status}`}
+                      </code>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-orange-600 mt-2 font-medium">{t('adminOffers.cityadsPostback')}</p>
+                      <code className="block text-[10px] text-gray-500 mt-1 break-all leading-relaxed">
+                        {`{API_URL}/postback/cityads?xid={xid}&offer_id={offer_id}&payout={payout}&payout_currency={currency}&sa={sa}&status={status}&action_type={action_type}&conversion_time={conversion_time}`}
+                      </code>
+                    </>
+                  )}
                 </div>
               )}
               <div>
