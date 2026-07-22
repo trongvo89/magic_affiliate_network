@@ -37,21 +37,107 @@ function CodeLine({ children }: { children: string }) {
   )
 }
 
+type ParamRow = { name: string; required: 'Required' | 'Recommended' | 'Optional'; desc: string; example: string }
+
+function ParamTable({ rows }: { rows: ParamRow[] }) {
+  return (
+    <table className="w-full text-xs mt-3">
+      <thead>
+        <tr className="bg-gray-50 text-gray-500 uppercase text-[10px]">
+          <th className="px-3 py-2 text-left font-medium">Parameter</th>
+          <th className="px-3 py-2 text-left font-medium">Required</th>
+          <th className="px-3 py-2 text-left font-medium">Description</th>
+          <th className="px-3 py-2 text-left font-medium">Example</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-gray-100">
+        {rows.map(r => (
+          <tr key={r.name} className="hover:bg-gray-50">
+            <td className="px-3 py-2 font-mono text-orange-700 font-semibold">{r.name}</td>
+            <td className="px-3 py-2">
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                r.required === 'Required' ? 'bg-red-100 text-red-700' :
+                r.required === 'Recommended' ? 'bg-orange-100 text-orange-700' :
+                'bg-gray-100 text-gray-500'
+              }`}>{r.required}</span>
+            </td>
+            <td className="px-3 py-2 text-gray-600">{r.desc}</td>
+            <td className="px-3 py-2 font-mono text-blue-700">{r.example}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+const MMP_CONFIGS = [
+  {
+    key: 'appsflyer',
+    label: 'AppsFlyer',
+    path: '/postback/appsflyer',
+    events: ['install', 'purchase', 'subscribe', 'af_purchase', 'complete_tutorial'],
+    attributionField: 'af_sub1',
+    params: [
+      { name: 'app_id', required: 'Required', desc: 'App ID registered in Magic (matches offer App ID)', example: 'com.shopee.vn' },
+      { name: 'af_tranid', required: 'Required', desc: 'Unique transaction/conversion ID (used for deduplication)', example: 'af_abc123456' },
+      { name: 'af_sub1', required: 'Required', desc: 'Magic Publisher ID — pass {sub1} macro from your S2S template', example: 'cm9abc...' },
+      { name: 'event_name', required: 'Optional', desc: 'Event type. Defaults to "install"', example: 'purchase' },
+      { name: 'event_revenue', required: 'Optional', desc: 'Order/revenue value (float)', example: '75.00' },
+      { name: 'event_revenue_currency', required: 'Optional', desc: 'Currency code (ISO 4217). Overridden by offer currency if set', example: 'USD' },
+      { name: 'install_time', required: 'Optional', desc: 'Event timestamp (ISO 8601)', example: '2026-06-29T10:00:00Z' },
+    ] as ParamRow[],
+  },
+  {
+    key: 'adjust',
+    label: 'Adjust',
+    path: '/postback/adjust',
+    events: ['install', 'purchase', 'revenue', 'reengagement'],
+    attributionField: 'partner_parameter_1',
+    params: [
+      { name: 'app_token', required: 'Required', desc: 'App token registered in Magic (matches offer App ID)', example: 'abc123xyz' },
+      { name: 'transaction_id', required: 'Required', desc: 'Unique transaction ID (used for deduplication)', example: 'txn_abc123' },
+      { name: 'partner_parameter_1', required: 'Required', desc: 'Magic Publisher ID — set in Adjust Partner Parameters as {publisher_id}', example: 'cm9abc...' },
+      { name: 'event_token', required: 'Optional', desc: 'Event type. Defaults to "install"', example: 'purchase' },
+      { name: 'revenue', required: 'Optional', desc: 'Order/revenue value (float)', example: '75.00' },
+      { name: 'currency', required: 'Optional', desc: 'Currency code (ISO 4217)', example: 'USD' },
+      { name: 'created_at', required: 'Optional', desc: 'Event timestamp (ISO 8601)', example: '2026-06-29T10:00:00Z' },
+    ] as ParamRow[],
+  },
+  {
+    key: 'cityads',
+    label: 'CityAds',
+    path: '/postback/cityads',
+    events: ['conversion', 'sale', 'lead', 'install', 'registration'],
+    attributionField: 'sa',
+    params: [
+      { name: 'offer_id', required: 'Required', desc: 'Offer App ID in Magic (matches CityAds offer ID)', example: '38407' },
+      { name: 'xid', required: 'Recommended', desc: 'Unique conversion ID for deduplication. Falls back to action_id → click_id', example: 'xid_abc123' },
+      { name: 'sa', required: 'Required', desc: 'Magic Publisher ID — pass sub-affiliate ID for attribution', example: 'cm9abc...' },
+      { name: 'action_type', required: 'Optional', desc: 'Event type. Defaults to "conversion"', example: 'sale' },
+      { name: 'open_commission', required: 'Optional', desc: 'Commission amount in source currency (multiplied by exchange rate)', example: '1500.00' },
+      { name: 'order_total', required: 'Optional', desc: 'Order/revenue value', example: '850000' },
+      { name: 'payout_currency', required: 'Optional', desc: 'Currency code for commission', example: 'RUB' },
+      { name: 'status', required: 'Optional', desc: '"1"/"approved" → Approved · "3"/"rejected"/"declined" → Rejected · else → Pending', example: '1' },
+      { name: 'conversion_time', required: 'Optional', desc: 'Event timestamp (Unix timestamp or ISO string)', example: '1751194800' },
+    ] as ParamRow[],
+  },
+]
+
 export default function AdminSettingsPage() {
   const [config, setConfig] = useState<PublicConfig | null>(null)
   const [apiUrl, setApiUrl] = useState('')
+  const [activeTab, setActiveTab] = useState('cityads')
   const { t } = useLocale()
 
   useEffect(() => {
     api.get('/config/public').then(res => setConfig(res.data)).catch(() => setConfig({ trackingDomain: null }))
-    // Derive the API base URL from the current proxy
     if (typeof window !== 'undefined') {
-      // api-proxy rewrites to the API — strip /api-proxy to get the real API URL
       setApiUrl(window.location.origin)
     }
   }, [])
 
   const trackingDomain = config?.trackingDomain
+  const activeMmp = MMP_CONFIGS.find(m => m.key === activeTab)!
 
   return (
     <div className="p-6 max-w-3xl">
@@ -184,6 +270,88 @@ export default function AdminSettingsPage() {
             </div>
           ))}
           <p className="text-xs text-gray-400 pt-1">{t('adminSettings.referDocs')}</p>
+        </div>
+      </div>
+
+      {/* Postback API Reference */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mt-6">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900">Postback API Reference</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Full parameter documentation for partner integration</p>
+        </div>
+
+        {/* MMP Tabs */}
+        <div className="flex border-b border-gray-100">
+          {MMP_CONFIGS.map(m => (
+            <button key={m.key} onClick={() => setActiveTab(m.key)}
+              className={`px-5 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === m.key ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          {/* Endpoint */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Endpoint</p>
+            <div className="flex items-center gap-2 bg-gray-900 rounded-lg px-4 py-3">
+              <span className="text-blue-400 text-xs font-mono font-bold mr-2">GET / POST</span>
+              <code className="text-green-400 text-xs font-mono flex-1 break-all">{apiUrl}{activeMmp.path}</code>
+              <CopyButton text={`${apiUrl}${activeMmp.path}`} />
+            </div>
+            <p className="text-xs text-gray-400 mt-2">Parameters can be sent as query string (GET) or request body (POST). Both are accepted.</p>
+          </div>
+
+          {/* Attribution note */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-xs text-blue-800">
+            <strong>Attribution:</strong> Pass the Magic Publisher ID in the <code className="font-mono bg-blue-100 px-1 rounded">{activeMmp.attributionField}</code> parameter. The publisher's ID can be found in their profile page (Admin → Publishers).
+          </div>
+
+          {/* Parameters */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Parameters</p>
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <ParamTable rows={activeMmp.params} />
+            </div>
+          </div>
+
+          {/* Events */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Common Events</p>
+            <div className="flex flex-wrap gap-2">
+              {activeMmp.events.map(e => (
+                <span key={e} className="px-2.5 py-1 bg-gray-100 rounded-full text-xs font-mono text-gray-700">{e}</span>
+              ))}
+            </div>
+          </div>
+
+          {/* Response */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Response</p>
+            <div className="bg-gray-900 rounded-lg px-4 py-3">
+              <p className="text-gray-400 text-xs font-mono mb-1">HTTP 200 — always, including on error (to prevent MMP retries)</p>
+              <code className="text-green-400 text-xs font-mono">{'{ "ok": true }'}</code>
+            </div>
+          </div>
+
+          {/* UAT note */}
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3 text-xs text-yellow-800">
+            <strong>UAT Testing:</strong> No separate UAT environment. Use a dedicated test offer (with a distinct App ID) on the production endpoint. Check results in Admin → Conversions and Admin → Postback Logs.
+          </div>
+
+          {/* Example URL */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Example Request</p>
+            {activeMmp.key === 'appsflyer' && (
+              <CodeLine>{`${apiUrl}/postback/appsflyer?app_id=com.example&af_tranid=af_123&af_sub1=PUBLISHER_ID&event_name=purchase&event_revenue=75.00&event_revenue_currency=USD`}</CodeLine>
+            )}
+            {activeMmp.key === 'adjust' && (
+              <CodeLine>{`${apiUrl}/postback/adjust?app_token=abc123&transaction_id=txn_123&partner_parameter_1=PUBLISHER_ID&event_token=purchase&revenue=75.00&currency=USD`}</CodeLine>
+            )}
+            {activeMmp.key === 'cityads' && (
+              <CodeLine>{`${apiUrl}/postback/cityads?offer_id=38407&xid=xid_123&sa=PUBLISHER_ID&action_type=sale&open_commission=1500&payout_currency=RUB&status=1`}</CodeLine>
+            )}
+          </div>
         </div>
       </div>
     </div>
