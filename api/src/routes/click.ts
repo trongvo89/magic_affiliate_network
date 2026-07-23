@@ -34,8 +34,8 @@ export default async function clickRoutes(server: FastifyInstance) {
 
     let dest = offer.destinationUrl
     const sep = dest.includes('?') ? '&' : '?'
-    if (publisherId) dest = `${dest}${sep}sa=${encodeURIComponent(publisherId)}`
-    if (clickId) dest = `${dest}&click_id=${encodeURIComponent(clickId)}`
+    if (clickId) dest = `${dest}${sep}click_id=${encodeURIComponent(clickId)}`
+    if (publisherId) dest = `${dest}&utm_content=${encodeURIComponent(publisherId)}`
 
     return reply.redirect(302, dest)
   }
