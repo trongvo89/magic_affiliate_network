@@ -290,7 +290,9 @@ export default async function postbackRoutes(server: FastifyInstance) {
   const eventType = query.event || 'conversion'
   const revenue = parseFloat(query.revenue || '0') || 0
   const rawCurrency = query.currency || null
-  const eventAt = query.timestamp ? new Date(isNaN(Number(query.timestamp)) ? query.timestamp : Number(query.timestamp) * 1000) : new Date()
+  const rawTs = query.timestamp ? query.timestamp.replace(/[{}]/g, '') : null
+  const parsedTs = rawTs ? (isNaN(Number(rawTs)) ? new Date(rawTs) : new Date(Number(rawTs) * 1000)) : null
+  const eventAt = (parsedTs && !isNaN(parsedTs.getTime())) ? parsedTs : new Date()
 
   if (!sourceRefId) {
     await logPostback({ source: 's2s', rawQuery: rawPayload, result: 'error', reason: 'missing transaction_id' })
@@ -322,7 +324,7 @@ export default async function postbackRoutes(server: FastifyInstance) {
       data: {
         sourceType: offer.mmpSource, sourceRefId,
         offerId: offer.id, publisherId: publisher?.id ?? null,
-        eventType, revenue, advCommission: revenue, commissionAmount, currency, status,
+        eventType, revenue, commissionAmount, currency, status,
         rawPayload: rawPayload as any, eventAt,
       },
     })
