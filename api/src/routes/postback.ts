@@ -96,7 +96,7 @@ export default async function postbackRoutes(server: FastifyInstance) {
         data: {
           sourceType: MmpSource.APPSFLYER, sourceRefId,
           offerId: offer.id, publisherId: publisher?.id ?? null,
-          eventType, revenue, advCommission: revenue, commissionAmount, currency, status,
+          eventType, revenue, commissionAmount, currency, status,
           rawPayload: rawPayload as any, eventAt,
         },
       })
@@ -150,7 +150,7 @@ export default async function postbackRoutes(server: FastifyInstance) {
         data: {
           sourceType: MmpSource.ADJUST, sourceRefId,
           offerId: offer.id, publisherId: publisher?.id ?? null,
-          eventType, revenue, advCommission: revenue, commissionAmount, currency, status,
+          eventType, revenue, commissionAmount, currency, status,
           rawPayload: rawPayload as any, eventAt,
         },
       })
@@ -204,7 +204,6 @@ export default async function postbackRoutes(server: FastifyInstance) {
     const currency = offer.currency || rawCurrency || 'USD'
     const publisher = publisherId ? await prisma.user.findUnique({ where: { id: publisherId } }) : null
 
-    const advCommission = openCommission * exchangeRate
     const commissionAmount = networkCommission > 0
       ? calculateCommission(offer.commissionType as CommType, offer.commissionValue, networkCommission)
       : 0
@@ -222,7 +221,7 @@ export default async function postbackRoutes(server: FastifyInstance) {
         data: {
           sourceType: MmpSource.CITYADS, sourceRefId,
           offerId: offer.id, publisherId: publisher?.id ?? null,
-          eventType, revenue, advCommission, commissionAmount, currency, status,
+          eventType, revenue, commissionAmount, currency, status,
           rawPayload: rawPayload as any, eventAt,
         },
       })
