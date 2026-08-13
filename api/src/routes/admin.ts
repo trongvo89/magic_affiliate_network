@@ -957,41 +957,6 @@ export default async function adminRoutes(server: FastifyInstance) {
     }
   )
 
-  // Backfill advCommission for existing conversions
-  server.post('/backfill-adv-commission', async (request) => {
-    const exchangeRate = parseFloat(process.env.CITYADS_EXCHANGE_RATE || '1')
-    const conversions = await prisma.conversion.findMany({
-      where: { advCommission: 0 },
-      select: { id: true, sourceType: true, revenue: true, rawPayload: true },
-    })
-
-    let updated = 0
-    for (const conv of conversions) {
-      let advComm = 0
-      if (conv.sourceType === 'CITYADS') {
-        const raw = conv.rawPayload as Record<string, any>
-        const openCommission = parseFloat(raw.open_commission || '0') || 0
-        advComm = openCommission * exchangeRate
-      } else {
-        advComm = conv.revenue
-      }
-
-      if (advComm > 0) {
-        await prisma.conversion.update({ where: { id: conv.id }, data: { advCommission: advComm } })
-        updated++
-      }
-    }
-
-    const user = request.user as any
-    await auditLog(prisma, {
-      userId: user.id, userName: user.name || user.email,
-      action: 'BACKFILL_ADV_COMMISSION', entity: 'Conversion', entityId: 'batch',
-      changes: { total: conversions.length, updated, exchangeRate },
-    })
-
-    return { total: conversions.length, updated, exchangeRate }
-  })
-
   // Retry failed postbacks
   server.post('/retry-failed-postbacks', async (request) => {
     const logs = await (prisma as any).postbackLog.findMany({
