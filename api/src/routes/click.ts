@@ -33,9 +33,16 @@ export default async function clickRoutes(server: FastifyInstance) {
     }
 
     let dest = offer.destinationUrl
-    const sep = dest.includes('?') ? '&' : '?'
-    if (clickId) dest = `${dest}${sep}click_id=${encodeURIComponent(clickId)}`
-    if (publisherId) dest = `${dest}&utm_content=${encodeURIComponent(publisherId)}`
+    // Templates like ...&p1={click_id}&p2={pub} get filled in place; otherwise params are appended.
+    if (/\{(click_id|pub)\}/.test(dest)) {
+      dest = dest
+        .replace(/\{click_id\}/g, encodeURIComponent(clickId || ''))
+        .replace(/\{pub\}/g, encodeURIComponent(publisherId || ''))
+    } else {
+      const sep = dest.includes('?') ? '&' : '?'
+      if (clickId) dest = `${dest}${sep}click_id=${encodeURIComponent(clickId)}`
+      if (publisherId) dest = `${dest}${clickId ? '&' : sep}utm_content=${encodeURIComponent(publisherId)}`
+    }
 
     return reply.redirect(302, dest)
   }
