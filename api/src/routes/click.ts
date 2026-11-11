@@ -41,7 +41,8 @@ export default async function clickRoutes(server: FastifyInstance) {
     } else {
       const sep = dest.includes('?') ? '&' : '?'
       if (clickId) dest = `${dest}${sep}click_id=${encodeURIComponent(clickId)}`
-      if (publisherId) dest = `${dest}${clickId ? '&' : sep}utm_content=${encodeURIComponent(publisherId)}`
+      // CityAds echoes `sa` back in its postback to attribute the publisher; Direct S2S partners read utm_content.
+      if (publisherId) dest = `${dest}${clickId ? '&' : sep}utm_content=${encodeURIComponent(publisherId)}&sa=${encodeURIComponent(publisherId)}`
     }
 
     return reply.redirect(302, dest)
