@@ -176,7 +176,11 @@ export default async function postbackRoutes(server: FastifyInstance) {
   async function handleCityAds(query: CityAdsQuery, rawPayload: Record<string, unknown>) {
     const rawXid = query.xid || query.action_id || query.click_id
     const appId = query.offer_id
-    const publisherId = query.sa
+    // sa is "<publisherId>" or "<publisherId>_<publisher's own click id>" (see click.ts)
+    const rawSa = query.sa || ''
+    const saSplit = rawSa.indexOf('_')
+    const publisherId = saSplit > 0 ? rawSa.slice(0, saSplit) : rawSa || undefined
+    const sub1 = saSplit > 0 ? rawSa.slice(saSplit + 1) : ''
     const eventType = query.action_type || 'conversion'
     const openCommission = parseFloat(query.open_commission || '0') || 0
     const payout = parseFloat(query.payout || '0') || 0
@@ -231,6 +235,7 @@ export default async function postbackRoutes(server: FastifyInstance) {
         setImmediate(() => sendOutboundPostback(prisma, conversion.id, publisher.postbackUrl!, {
           click_id: publisher.id, payout: String(commissionAmount), event: eventType,
           order_id: sourceRefId, status: status.toLowerCase(), offer_id: offer.id, offer_name: offer.name,
+          sub1, p1: sub1,
         }))
       }
     } catch (err: any) {

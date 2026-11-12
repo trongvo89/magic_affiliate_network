@@ -6,7 +6,9 @@ export default async function clickRoutes(server: FastifyInstance) {
 
   async function handleClick(request: any, reply: any) {
     const { offerId } = request.params
-    const { pub: publisherId } = request.query
+    const { pub: publisherId, p1 } = request.query
+    // Publisher's own tracker click ID; ignored if it is an unresolved macro like {click_id}.
+    const sub1 = typeof p1 === 'string' && /^[A-Za-z0-9.-]{1,64}$/.test(p1) ? p1 : ''
 
     const offer = await prisma.offer.findFirst({
       where: { id: offerId, status: 'ACTIVE' },
@@ -42,7 +44,9 @@ export default async function clickRoutes(server: FastifyInstance) {
       const sep = dest.includes('?') ? '&' : '?'
       if (clickId) dest = `${dest}${sep}click_id=${encodeURIComponent(clickId)}`
       // CityAds echoes `sa` back in its postback to attribute the publisher; Direct S2S partners read utm_content.
-      if (publisherId) dest = `${dest}${clickId ? '&' : sep}utm_content=${encodeURIComponent(publisherId)}&sa=${encodeURIComponent(publisherId)}`
+      // `sa` carries "<publisherId>_<sub1>" when the publisher supplied p1, so their click ID survives the round trip.
+      const sa = sub1 ? `${publisherId}_${sub1}` : publisherId
+      if (publisherId) dest = `${dest}${clickId ? '&' : sep}utm_content=${encodeURIComponent(publisherId)}&sa=${encodeURIComponent(sa)}`
     }
 
     return reply.redirect(302, dest)
