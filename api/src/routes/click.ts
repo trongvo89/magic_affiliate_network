@@ -6,9 +6,10 @@ export default async function clickRoutes(server: FastifyInstance) {
 
   async function handleClick(request: any, reply: any) {
     const { offerId } = request.params
-    const { pub: publisherId, p1 } = request.query
-    // Publisher's own tracker click ID; ignored if it is an unresolved macro like {click_id}.
-    const sub1 = typeof p1 === 'string' && /^[A-Za-z0-9.-]{1,64}$/.test(p1) ? p1 : ''
+    const { pub: publisherId } = request.query
+    // Publisher's own tracker click ID (?click_id= or ?p1=); ignored if it is an unresolved macro like [:click_id].
+    const rawSub1 = request.query.click_id ?? request.query.p1
+    const sub1 = typeof rawSub1 === 'string' && /^[A-Za-z0-9._-]{1,64}$/.test(rawSub1) ? rawSub1 : ''
 
     const offer = await prisma.offer.findFirst({
       where: { id: offerId, status: 'ACTIVE' },
