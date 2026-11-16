@@ -34,6 +34,7 @@ const translations: Record<string, Record<Locale, string>> = {
   'settings.clickTransactionId': { vi: 'Click/transaction ID từ MMP', en: 'Click/transaction ID from MMP' },
   'settings.status': { vi: 'Trạng thái (approved/pending/rejected)', en: 'Status (approved/pending/rejected)' },
   'settings.yourPublisherId': { vi: 'Publisher ID của bạn', en: 'Your Publisher ID' },
+  'settings.yourClickId': { vi: 'Click ID của bạn (gắn &click_id= vào link)', en: 'Your own click ID (add &click_id= to the link)' },
   'settings.offerIdInMagic': { vi: 'ID offer trong Magic', en: 'Offer ID in Magic' },
   'settings.offerNameInMagic': { vi: 'Tên offer trong Magic', en: 'Offer name in Magic' },
 
