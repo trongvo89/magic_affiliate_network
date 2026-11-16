@@ -55,6 +55,9 @@ export default function SettingsPage() {
     try {
       const url = form.postbackUrl
         .replace(/{click_id}/g, 'TEST_CLICK')
+        .replace(/{sub1}/g, 'TEST_CLICK')
+        .replace(/{p1}/g, 'TEST_CLICK')
+        .replace(/{pub_id}/g, 'TEST_PUB_ID')
         .replace(/{payout}/g, '1.00')
         .replace(/{event}/g, 'test')
         .replace(/{order_id}/g, 'TEST_ORDER')
@@ -134,7 +137,8 @@ export default function SettingsPage() {
                 ['{event}', t('settings.eventType')],
                 ['{order_id}', t('settings.clickTransactionId')],
                 ['{status}', t('settings.status')],
-                ['{click_id}', t('settings.yourPublisherId')],
+                ['{click_id}', t('settings.yourClickId')],
+                ['{pub_id}', t('settings.yourPublisherId')],
                 ['{offer_id}', t('settings.offerIdInMagic')],
                 ['{offer_name}', t('settings.offerNameInMagic')],
               ].map(([macro, desc]) => (

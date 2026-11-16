@@ -104,7 +104,9 @@ export default async function postbackRoutes(server: FastifyInstance) {
 
       if (publisher?.postbackUrl) {
         setImmediate(() => sendOutboundPostback(prisma, conversion.id, publisher.postbackUrl!, {
-          click_id: publisher.id, payout: String(commissionAmount), event: eventType,
+          // AppsFlyer postbacks carry no publisher-side click id, so click_id stays the publisher id.
+          click_id: publisher.id, pub_id: publisher.id,
+          payout: String(commissionAmount), event: eventType,
           order_id: sourceRefId, status: status.toLowerCase(), offer_id: offer.id, offer_name: offer.name,
         }))
       }
@@ -158,7 +160,9 @@ export default async function postbackRoutes(server: FastifyInstance) {
 
       if (publisher?.postbackUrl) {
         setImmediate(() => sendOutboundPostback(prisma, conversion.id, publisher.postbackUrl!, {
-          click_id: publisher.id, payout: String(commissionAmount), event: eventType,
+          // Adjust postbacks carry no publisher-side click id, so click_id stays the publisher id.
+          click_id: publisher.id, pub_id: publisher.id,
+          payout: String(commissionAmount), event: eventType,
           order_id: sourceRefId, status: status.toLowerCase(), offer_id: offer.id, offer_name: offer.name,
         }))
       }
@@ -233,9 +237,10 @@ export default async function postbackRoutes(server: FastifyInstance) {
 
       if (publisher?.postbackUrl) {
         setImmediate(() => sendOutboundPostback(prisma, conversion.id, publisher.postbackUrl!, {
-          click_id: publisher.id, payout: String(commissionAmount), event: eventType,
+          // click_id is the publisher's OWN tracker click id, so their tracker can match the conversion.
+          click_id: sub1, sub1, p1: sub1, pub_id: publisher.id,
+          payout: String(commissionAmount), event: eventType,
           order_id: sourceRefId, status: status.toLowerCase(), offer_id: offer.id, offer_name: offer.name,
-          sub1, p1: sub1,
         }))
       }
     } catch (err: any) {
@@ -290,7 +295,11 @@ export default async function postbackRoutes(server: FastifyInstance) {
   async function handleS2S(query: S2SQuery, rawPayload: Record<string, unknown>) {
   const sourceRefId = query.transaction_id
   const offerId = query.offer_id
-  const publisherId = query.pub
+  // pub is "<publisherId>" or "<publisherId>_<publisher's own click id>" (see click.ts)
+  const rawPub = query.pub || ''
+  const pubSplit = rawPub.indexOf('_')
+  const publisherId = pubSplit > 0 ? rawPub.slice(0, pubSplit) : rawPub || undefined
+  const sub1 = pubSplit > 0 ? rawPub.slice(pubSplit + 1) : ''
   const eventType = query.event || 'conversion'
   const revenue = parseFloat(query.revenue || '0') || 0
   const rawCurrency = query.currency || null
@@ -336,7 +345,9 @@ export default async function postbackRoutes(server: FastifyInstance) {
 
     if (publisher?.postbackUrl) {
       setImmediate(() => sendOutboundPostback(prisma, conversion.id, publisher.postbackUrl!, {
-        click_id: publisher.id, payout: String(commissionAmount), event: eventType,
+        // click_id is the publisher's OWN tracker click id, so their tracker can match the conversion.
+        click_id: sub1, sub1, p1: sub1, pub_id: publisher.id,
+        payout: String(commissionAmount), event: eventType,
         order_id: sourceRefId, status: status.toLowerCase(), offer_id: offer.id, offer_name: offer.name,
       }))
     }
